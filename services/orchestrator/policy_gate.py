@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 
 FREEFORM_WINDOW_HOURS = 24
 ESCALATION_ACTIONS = ["CALL", "talk to pharmacist", "talk to doctor"]
+ALLOWED_FLOW_ACTIONS = {"ALLOW", "REROUTE", "REJECT"}
+ALLOWED_OUTBOUND_MODES = {"FREEFORM", "TEMPLATE"}
 DISALLOWED_MEDICINE_FLOWS = {
     "order_controlled_medicine",
     "sell_prescription_without_verification",
@@ -57,6 +59,11 @@ class AuditTrail:
         self.records: List[Dict[str, object]] = []
 
     def log_policy_decision(self, decision: PolicyDecision) -> None:
+        if decision.flow_action not in ALLOWED_FLOW_ACTIONS:
+            raise ValueError(f"Invalid flow action: {decision.flow_action}")
+        if decision.outbound_mode not in ALLOWED_OUTBOUND_MODES:
+            raise ValueError(f"Invalid outbound mode: {decision.outbound_mode}")
+
         self.records.append(
             {
                 "type": "policy_decision",
@@ -87,6 +94,8 @@ class PolicyGate:
         now = now or datetime.now(timezone.utc)
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)
+        else:
+            now = now.astimezone(timezone.utc)
 
         reason_codes: List[str] = []
         details: Dict[str, str] = {
@@ -102,6 +111,8 @@ class PolicyGate:
             details["last_inbound"] = "missing"
         else:
             elapsed = now - last_inbound
+            if elapsed.total_seconds() < 0:
+                elapsed = timedelta(0)
             details["last_inbound"] = last_inbound.isoformat()
             details["elapsed_since_last_inbound_seconds"] = str(int(elapsed.total_seconds()))
             if elapsed <= timedelta(hours=FREEFORM_WINDOW_HOURS):
@@ -121,6 +132,8 @@ class PolicyGate:
             reason_codes.append(ReasonCode.REGULATED_CONTENT_REROUTED)
 
         reason_codes.append(ReasonCode.HUMAN_ESCALATION_EXPOSED)
+
+        reason_codes = list(dict.fromkeys(reason_codes))
 
         decision = PolicyDecision(
             patient_id=patient_id,

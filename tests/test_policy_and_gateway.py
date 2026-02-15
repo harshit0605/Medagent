@@ -44,6 +44,32 @@ class PolicyGateTests(unittest.TestCase):
         self.assertIn("CALL", decision.escalation_actions)
 
 
+    def test_policy_gate_handles_naive_now_and_dedupes_reason_codes(self) -> None:
+        naive_now = datetime(2026, 1, 1)
+        self.store.set_last_inbound_timestamp("p3", datetime(2025, 12, 31, 23, 0, 0))
+
+        decision = self.gate.evaluate("p3", intent="general_question", requested_flow="support", now=naive_now)
+
+        self.assertIn(decision.outbound_mode, ["FREEFORM", "TEMPLATE"])
+        self.assertEqual(len(decision.reason_codes), len(set(decision.reason_codes)))
+
+
+class AuditTrailValidationTests(unittest.TestCase):
+    def test_rejects_invalid_policy_shapes(self) -> None:
+        audit = AuditTrail()
+
+        with self.assertRaises(ValueError):
+            audit.log_policy_decision(
+                type("D", (), {
+                    "patient_id": "p1",
+                    "outbound_mode": "BAD",
+                    "flow_action": "ALLOW",
+                    "reason_codes": [],
+                    "details": {},
+                })()
+            )
+
+
 class WhatsAppGatewayTests(unittest.TestCase):
     def test_enforces_template_send_when_policy_requires_template(self) -> None:
         store = PatientStateStore()

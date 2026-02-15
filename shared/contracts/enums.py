@@ -39,3 +39,4 @@ class EventType(str, Enum):
     DOSE_MISSED = "dose_missed"
     REFILL_DUE = "refill_due"
     TRIAGE_ALERT = "triage_alert"
+    FOLLOWUP_CLOSURE = "followup_closure"
