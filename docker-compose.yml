@@ -1,3 +1,70 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-medagent}
+      POSTGRES_USER: ${POSTGRES_USER:-medagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medagent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  orchestrator:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+    env_file:
+      - .env.example
+    command: >
+      sh -c "pip install -e .[orchestrator] &&
+             uvicorn orchestrator.main:app --host 0.0.0.0 --port 8001"
+    ports:
+      - "8001:8001"
+    depends_on:
+      - redis
+      - postgres
+
+  whatsapp_gateway:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+    env_file:
+      - .env.example
+    command: >
+      sh -c "pip install -e .[whatsapp_gateway] &&
+             uvicorn whatsapp_gateway.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - orchestrator
+
+  scheduler:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+    env_file:
+      - .env.example
+    command: >
+      sh -c "pip install -e .[scheduler] &&
+             uvicorn scheduler.main:app --host 0.0.0.0 --port 8002"
+    ports:
+      - "8002:8002"
+    depends_on:
+      - redis
+
+volumes:
+  pg_data:
 services:
   postgres:
     image: postgres:16
