@@ -1,0 +1,10 @@
+{
+  "event_id": "evt_003",
+  "event_type": "dose_missed",
+  "patient_id": "patient_42",
+  "occurred_at": "2026-01-12T23:15:00Z",
+  "correlation_id": "corr_12345",
+  "medication_name": "Metformin",
+  "scheduled_at": "2026-01-12T19:00:00Z",
+  "grace_window_minutes": 120
+}

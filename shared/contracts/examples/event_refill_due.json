@@ -1,0 +1,10 @@
+{
+  "event_id": "evt_004",
+  "event_type": "refill_due",
+  "patient_id": "patient_42",
+  "occurred_at": "2026-01-20T09:00:00Z",
+  "correlation_id": "corr_67890",
+  "medication_name": "Metformin",
+  "refill_by": "2026-01-25T00:00:00Z",
+  "remaining_doses": 4
+}

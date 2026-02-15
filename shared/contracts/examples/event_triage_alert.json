@@ -1,0 +1,10 @@
+{
+  "event_id": "evt_005",
+  "event_type": "triage_alert",
+  "patient_id": "patient_42",
+  "occurred_at": "2026-01-12T19:03:00Z",
+  "correlation_id": "corr_99999",
+  "severity": "high",
+  "reason": "Patient reports dizziness after dose",
+  "escalation_target": "on_call_nurse"
+}
