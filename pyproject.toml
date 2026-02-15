@@ -1,4 +1,17 @@
 [project]
+name = "medagent-contracts"
+version = "0.1.0"
+dependencies = [
+  "pydantic>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 name = "medagent"
 version = "0.1.0"
 description = "WhatsApp-first care concierge agent monorepo"

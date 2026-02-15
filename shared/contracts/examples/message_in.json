@@ -1,0 +1,26 @@
+{
+  "message_id": "msg_in_001",
+  "channel": {
+    "channel_type": "whatsapp",
+    "provider": "twilio",
+    "source_address": "+15550001111",
+    "destination_address": "+15559990000",
+    "external_message_id": "SMabc123"
+  },
+  "patient": {
+    "patient_id": "patient_42",
+    "patient_mrn": "MRN-2048",
+    "timezone": "America/New_York",
+    "preferred_language": "en"
+  },
+  "content_type": "text",
+  "text": "I took my evening dose.",
+  "intent": "dose_confirmation",
+  "received_at": "2026-01-12T19:01:00Z",
+  "sent_at": "2026-01-12T19:00:49Z",
+  "metadata": {
+    "tenant_id": "clinic-east",
+    "priority": 1,
+    "is_retry": false
+  }
+}
