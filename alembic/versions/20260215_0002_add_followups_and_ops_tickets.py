@@ -17,9 +17,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE followup_status AS ENUM ('due', 'booked', 'completed', 'reviewed')")
-    op.execute("CREATE TYPE ops_ticket_status AS ENUM ('open', 'acknowledged', 'resolved')")
-
     op.create_table(
         "lab_followups",
         sa.Column("id", sa.Integer(), nullable=False),

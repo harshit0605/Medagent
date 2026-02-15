@@ -88,7 +88,7 @@ def emit_triage_alert(payload: TriageAlertRequest) -> Event:
 def emit_followup_closure(payload: FollowupClosureRequest) -> Event:
     now = datetime.now(timezone.utc)
     return Event(
-        event_type=EventType.TRIAGE_ALERT,
+        event_type=EventType.FOLLOWUP_CLOSURE,
         patient_id=payload.patient_id,
         occurred_at=now,
         at=now,
