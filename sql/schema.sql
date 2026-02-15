@@ -83,3 +83,42 @@ CREATE TABLE IF NOT EXISTS templates (
 CREATE INDEX IF NOT EXISTS idx_patients_phone ON patients(phone);
 CREATE INDEX IF NOT EXISTS idx_adherence_events_patient_scheduled_at ON adherence_events(patient_id, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_alerts_patient_opened_closed ON alerts(patient_id, opened_at, closed_at);
+
+CREATE TABLE IF NOT EXISTS lab_followups (
+  id TEXT PRIMARY KEY,
+  patient_id TEXT NOT NULL REFERENCES patients(id),
+  test_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'due',
+  booked_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS appointment_followups (
+  id TEXT PRIMARY KEY,
+  patient_id TEXT NOT NULL REFERENCES patients(id),
+  clinician_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'due',
+  booked_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ops_tickets (
+  id TEXT PRIMARY KEY,
+  patient_id TEXT NOT NULL REFERENCES patients(id),
+  category TEXT NOT NULL,
+  priority TEXT NOT NULL,
+  sla_minutes INT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  acknowledged_at TIMESTAMPTZ,
+  resolved_at TIMESTAMPTZ,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lab_followups_patient_status ON lab_followups(patient_id, status);
+CREATE INDEX IF NOT EXISTS idx_appointment_followups_patient_status ON appointment_followups(patient_id, status);
+CREATE INDEX IF NOT EXISTS idx_ops_tickets_status_priority ON ops_tickets(status, priority);

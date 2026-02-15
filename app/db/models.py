@@ -78,6 +78,19 @@ class TemplateCategory(enum.Enum):
     transactional = "transactional"
 
 
+class OpsTicketStatus(enum.Enum):
+    open = "open"
+    acknowledged = "acknowledged"
+    resolved = "resolved"
+
+
+class FollowupStatus(enum.Enum):
+    due = "due"
+    booked = "booked"
+    completed = "completed"
+    reviewed = "reviewed"
+
+
 class Patient(TimestampMixin, Base):
     __tablename__ = "patients"
 
@@ -225,3 +238,48 @@ class Template(TimestampMixin, Base):
     category: Mapped[TemplateCategory] = mapped_column(
         Enum(TemplateCategory, name="template_category"), nullable=False, default=TemplateCategory.utility
     )
+
+
+
+class LabFollowup(TimestampMixin, Base):
+    __tablename__ = "lab_followups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    test_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[FollowupStatus] = mapped_column(
+        Enum(FollowupStatus, name="followup_status"), nullable=False, default=FollowupStatus.due
+    )
+    booked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AppointmentFollowup(TimestampMixin, Base):
+    __tablename__ = "appointment_followups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    clinician_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[FollowupStatus] = mapped_column(
+        Enum(FollowupStatus, name="followup_status"), nullable=False, default=FollowupStatus.due
+    )
+    booked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OpsTicket(TimestampMixin, Base):
+    __tablename__ = "ops_tickets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority: Mapped[str] = mapped_column(String(8), nullable=False)
+    sla_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    status: Mapped[OpsTicketStatus] = mapped_column(
+        Enum(OpsTicketStatus, name="ops_ticket_status"), nullable=False, default=OpsTicketStatus.open
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(Text)
