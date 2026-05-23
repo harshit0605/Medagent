@@ -41,10 +41,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Patient
+from app.db.models import Patient, PatientCohortTag
 from app.db.repositories import (
     broadcast_campaigns as broadcast_campaigns_repo,
 )
@@ -53,10 +53,13 @@ from app.db.repositories import scheduled_events as scheduled_events_repo
 log = logging.getLogger(__name__)
 
 
-# Cohort-filter shape:
-#   {"cohort": "diabetes" | "cardiac" | "fall_risk" | "asthma"
-#             | "post_op" | "pregnancy"}
-# Future v2 supports cohort_tag_id + composite filters.
+# Cohort-filter shapes (any combination, AND-composed):
+#   {"cohort": "diabetes"}                 — single boolean cohort (legacy)
+#   {"all_of": ["diabetes", "cardiac"]}    — in ALL listed cohorts (AND)
+#   {"any_of": ["asthma", "pregnancy"]}    — in ANY listed cohort (OR)
+#   {"cohort_tag_id": 7}                    — assigned the clinician tag (M2M)
+# e.g. {"all_of": ["diabetes"], "any_of": ["cardiac", "fall_risk"]} →
+#   diabetics who are ALSO cardiac OR fall-risk.
 _LEGACY_COHORT_FIELDS: dict[str, str] = {
     "diabetes": "cohort_diabetes",
     "cardiac": "cohort_cardiac",
@@ -67,31 +70,57 @@ _LEGACY_COHORT_FIELDS: dict[str, str] = {
 }
 
 
+def _cohort_column(name: str):
+    field = _LEGACY_COHORT_FIELDS.get(name)
+    if field is None:
+        raise ValueError(
+            f"unsupported cohort {name!r}; "
+            f"valid: {sorted(_LEGACY_COHORT_FIELDS)}."
+        )
+    return getattr(Patient, field)
+
+
 async def resolve_recipients(
     db: AsyncSession, *, cohort_filter: dict[str, Any]
 ) -> list[Patient]:
     """Resolve a cohort filter to the matching patient rows.
 
-    For v1 we support the three legacy boolean cohorts. Patients
-    flagged ``erased_at`` are EXCLUDED from the result — the
-    erasure flow already wiped their PII; we shouldn't be
-    sending them broadcasts.
+    Supports the legacy single ``cohort`` plus composite ``all_of`` (AND) /
+    ``any_of`` (OR) over the six boolean cohorts, and ``cohort_tag_id`` for
+    clinician-authored tags. All supplied criteria are AND-composed. Patients
+    flagged ``erased_at`` are EXCLUDED (erasure wiped their PII).
 
-    Returns Patient ORM rows so the materialiser has direct
-    access to phone + db_id + consent flags without a second
-    round-trip.
+    Returns Patient ORM rows so the materialiser has direct access to phone +
+    db_id + consent flags without a second round-trip.
     """
-    cohort = cohort_filter.get("cohort")
-    if cohort not in _LEGACY_COHORT_FIELDS:
-        raise ValueError(
-            f"unsupported cohort filter: {cohort!r}. "
-            f"v1 supports: {sorted(_LEGACY_COHORT_FIELDS)}."
+    all_of: list[str] = list(cohort_filter.get("all_of") or [])
+    any_of: list[str] = list(cohort_filter.get("any_of") or [])
+    tag_id = cohort_filter.get("cohort_tag_id")
+    legacy = cohort_filter.get("cohort")
+    if legacy:
+        all_of.append(legacy)
+
+    conditions = [_cohort_column(name).is_(True) for name in all_of]
+    if any_of:
+        conditions.append(
+            or_(*[_cohort_column(name).is_(True) for name in any_of])
         )
-    column = getattr(Patient, _LEGACY_COHORT_FIELDS[cohort])
-    stmt = (
-        select(Patient)
-        .where(column.is_(True))
-        .where(Patient.erased_at.is_(None))
+    if tag_id is not None:
+        conditions.append(
+            Patient.id.in_(
+                select(PatientCohortTag.patient_id).where(
+                    PatientCohortTag.cohort_tag_id == int(tag_id)
+                )
+            )
+        )
+    if not conditions:
+        raise ValueError(
+            "cohort_filter must specify at least one of: cohort, all_of, "
+            "any_of, cohort_tag_id."
+        )
+
+    stmt = select(Patient).where(*conditions).where(
+        Patient.erased_at.is_(None)
     )
     return list((await db.execute(stmt)).scalars().all())
 

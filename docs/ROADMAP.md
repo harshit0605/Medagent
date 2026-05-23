@@ -117,7 +117,7 @@ Now activated end-to-end.
 | ✅ Goal auto-achievement (N consecutive on-target) | DONE — drift sweep flips active→achieved + resolves drift ticket | `goal_drift_sweep.py` |
 | 🟡 Clinical-alert on-call rota + multi-doctor escalation | re-pages same doctor; `is_on_call` boolean only | slice 11 |
 | 🟡 Calendar sync via webhook push | polling only | `calendar_sync_sweep.py:34` |
-| 🟡 Broadcast cohort-tag / composite filters | legacy 3 cohorts only | `broadcast_service.py:58` |
+| ✅ Broadcast cohort-tag / composite filters | DONE — all_of/any_of composite + cohort_tag_id, 6 cohorts | `broadcast_service.py` |
 | 🔴 Multi-patient households | caregivers exist; no 1→many model | SoT V1 |
 | 🟡 Refill/delivery coordination (senior) | reminders only, no logistics | SoT §3E |
 | 🔴 Post-op completion checklist + wound-photo→queue | side-effect triage only | SoT §3D |

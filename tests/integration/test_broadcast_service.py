@@ -436,3 +436,85 @@ def test_dispatcher_broadcast_payload_missing_template_raises():
     )()
     with pytest.raises(ValueError, match="missing template_name"):
         _build_message_out(fake_event)
+
+
+# ---- composite cohort filters ---------------------------------------------
+
+
+async def _seed_with_cohorts(**flags) -> int:
+    suffix = uuid.uuid4().hex[:8]
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        p = Patient(
+            full_name=f"Composite {suffix}",
+            phone=f"comp-{suffix}",
+            consent_sms=True,
+            **flags,
+        )
+        db.add(p)
+        await db.flush()
+        await db.commit()
+        return p.id
+
+
+async def test_resolve_all_of_requires_every_cohort():
+    both = await _seed_with_cohorts(
+        cohort_diabetes=True, cohort_cardiac=True
+    )
+    diabetes_only = await _seed_with_cohorts(cohort_diabetes=True)
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        ids = {
+            p.id
+            for p in await broadcast_service.resolve_recipients(
+                db, cohort_filter={"all_of": ["diabetes", "cardiac"]}
+            )
+        }
+    assert both in ids
+    assert diabetes_only not in ids
+
+
+async def test_resolve_any_of_matches_either():
+    asthma_only = await _seed_with_cohorts(cohort_asthma=True)
+    pregnancy_only = await _seed_with_cohorts(cohort_pregnancy=True)
+    cardiac_only = await _seed_with_cohorts(cohort_cardiac=True)
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        ids = {
+            p.id
+            for p in await broadcast_service.resolve_recipients(
+                db, cohort_filter={"any_of": ["asthma", "pregnancy"]}
+            )
+        }
+    assert asthma_only in ids
+    assert pregnancy_only in ids
+    assert cardiac_only not in ids
+
+
+async def test_resolve_composite_all_and_any():
+    # diabetic AND (cardiac OR fall_risk)
+    match = await _seed_with_cohorts(
+        cohort_diabetes=True, cohort_fall_risk=True
+    )
+    no_match = await _seed_with_cohorts(cohort_diabetes=True)  # missing the OR
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        ids = {
+            p.id
+            for p in await broadcast_service.resolve_recipients(
+                db,
+                cohort_filter={
+                    "all_of": ["diabetes"],
+                    "any_of": ["cardiac", "fall_risk"],
+                },
+            )
+        }
+    assert match in ids
+    assert no_match not in ids
+
+
+async def test_resolve_empty_filter_raises():
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        with pytest.raises(ValueError, match="at least one"):
+            await broadcast_service.resolve_recipients(db, cohort_filter={})
