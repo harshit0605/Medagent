@@ -31,6 +31,13 @@ dev = [
   "pytest-asyncio>=0.24",
   "ruff>=0.5.0",
 ]
+# Local, on-host voice-note transcription (WhatsApp voice notes → text).
+# Optional so CPU/disk-heavy model weights aren't pulled in deployments
+# that don't accept voice input; the transcription adapter degrades to a
+# "please type" fallback when this isn't installed.
+voice = [
+  "faster-whisper>=1.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app", "services", "shared"]

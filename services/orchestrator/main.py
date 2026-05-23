@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -55,6 +56,7 @@ from services.orchestrator.inbox_classifier import (
     is_action_tap,
 )
 from services.orchestrator.recap_generator import RecapContext, generate_recap
+from services.orchestrator import transcription
 from services.scheduler import dose_reminders
 from services.scheduler import lab_followups as lab_followups_scheduler
 from services.orchestrator.agent_workflow import (
@@ -713,6 +715,25 @@ async def route(
             now=now,
         )
 
+    # Voice notes: transcribe to text BEFORE any routing, classification,
+    # or triage so a spoken message transparently reuses every text flow.
+    # We mutate ``payload.message.text`` in place so the workflow, inbox
+    # classification, clinical-alert triage, AND the message log all
+    # operate on the transcript — not the raw ``[voice-note]`` marker.
+    # (A spoken "severe chest pain" must reach clinical triage.) Whisper
+    # decode is blocking CPU work, so it runs in a worker thread. The
+    # original marker is snapshotted into metadata for forensics, and
+    # ``input_kind`` is tagged ``voice`` so the ops inbox can badge it.
+    if transcription.looks_like_voice_note(payload.message.text):
+        original_marker = payload.message.text
+        transcript = await asyncio.to_thread(
+            transcription.maybe_transcribe, original_marker
+        )
+        if transcript:
+            payload.message.metadata["voice_marker"] = original_marker
+            payload.message.text = transcript
+            payload.message.input_kind = "voice"
+
     last_seen = payload.last_user_message_at or await patient_inbound_repo.get_last_inbound(
         db, patient_id
     )
@@ -914,10 +935,11 @@ async def route(
         request_duration_ms=request_duration_ms,
     )
     # Clinical-urgency triage. Independent best-effort path —
-    # only writes a row when severity ∈ {high, critical}. Run
-    # only on freeform text; action-tap and image inputs are
-    # already structured.
-    if inferred_input_kind == "text":
+    # only writes a row when severity ∈ {high, critical}. Run on
+    # freeform text AND transcribed voice notes (``inbound_text`` is the
+    # transcript by here) — a spoken "severe chest pain" must page.
+    # Action-tap and image inputs are already structured, so skip them.
+    if inferred_input_kind in ("text", "voice"):
         await _persist_clinical_alert_if_urgent(
             db,
             inbound_text=payload.message.text,

@@ -332,6 +332,23 @@ async def run_agent_workflow(
     normalized_last = _normalize_last_user_message(last_user_message_at)
     inbound_text = (text or "").strip()
 
+    # Voice-note → transcript before any routing (sync-fallback parity with
+    # the graph's _ingest_node). CPU-bound, so run off the loop.
+    if inbound_text:
+        import asyncio as _asyncio
+
+        from services.orchestrator.transcription import (
+            looks_like_voice_note,
+            maybe_transcribe,
+        )
+
+        if looks_like_voice_note(inbound_text):
+            transcript = await _asyncio.to_thread(
+                maybe_transcribe, inbound_text
+            )
+            if transcript:
+                inbound_text = transcript.strip()
+
     # Vitals self-report short-circuit — sync-fallback parity with the
     # graph router's vitals_handler. Safety first: if the message also
     # reads as a side-effect/symptom report, skip logging here and let the
@@ -439,8 +456,24 @@ async def _default_human_handoff(state: AgentState) -> dict[str, Any]:
 
 
 async def _ingest_node(state: AgentState) -> dict[str, Any]:
-    """Normalize timestamps + text; record the inbound HumanMessage in state.messages."""
+    """Normalize timestamps + text; record the inbound HumanMessage in state.messages.
+
+    Voice notes arrive as a ``[voice-note] public_path=...`` marker; we
+    transcribe to text HERE (before any routing) so a spoken message flows
+    through the same router as a typed one. Transcription is CPU-bound, so
+    it runs in a worker thread to keep the event loop responsive."""
+    import asyncio as _asyncio
+
+    from services.orchestrator.transcription import (
+        looks_like_voice_note,
+        maybe_transcribe,
+    )
+
     text = state.get("text", "").strip()
+    if looks_like_voice_note(text):
+        transcript = await _asyncio.to_thread(maybe_transcribe, text)
+        if transcript:
+            text = transcript.strip()
     delta: dict[str, Any] = {
         "now_utc": _normalize_now(state.get("now_utc")),
         "last_user_message_at": _normalize_last_user_message(state.get("last_user_message_at")),

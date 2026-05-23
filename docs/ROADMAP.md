@@ -52,11 +52,12 @@ enum value has nothing producing it.
 - [ ] Weekly trend summary surfaced to patient
 - **SoT ref:** §3A/§3B (glucose/BP capture + trend), MVP #1
 
-### P3 — 🔴 Voice note transcription adapter  · _task #9_
-MVP item "text + **voice notes**". No inbound audio path today. `faster-whisper`
-is already available transitively (graphify dep).
-- [ ] Inbound audio (WhatsApp voice) → text via faster-whisper
-- [ ] Normalize into existing text intake path
+### P3 — ✅ Voice note transcription adapter  · _task #9 — DONE_
+MVP item "text + **voice notes**". No inbound audio path before this.
+- [x] Inbound audio (WhatsApp voice) → text via faster-whisper (local, CPU/int8)
+- [x] Normalize into existing text intake path (transcribe once at `/route`
+      entry → mutate `payload.message.text` so routing, vitals, classification,
+      clinical triage, and message_log all see the transcript)
 - **SoT ref:** MVP #1, §3A (voice glucose), §3C (voice trigger diary)
 
 ### P4 — 🟡 Pregnancy timeline engine  · _task #10_
@@ -118,6 +119,26 @@ template exists with no flow.
 ---
 
 ## Progress log
+- 2026-05-23 — **P3 voice note transcription: DONE.** New
+  `services/orchestrator/transcription.py` — parses the ingress `[voice-note]
+  public_path=… mime=…` marker (mirrors the prescription-image path),
+  resolves the audio (shared upload volume or download via
+  `PUBLIC_MEDIA_BASE_URL`), and transcribes locally with import-guarded
+  faster-whisper (CPU/int8, model via `WHISPER_MODEL`, default `base`). Added
+  as an optional `[voice]` extra; when absent (or on any decode failure) it
+  degrades to a "please type" fallback — never drops the message. Transcription
+  happens ONCE at the `/route` entry (off-loop via `asyncio.to_thread`),
+  mutating `payload.message.text` so the workflow, vitals short-circuit, inbox
+  classification, clinical-alert triage, AND message_log all operate on the
+  transcript — a spoken "severe chest pain" reaches triage (the triage gate now
+  also fires for `input_kind=voice`). Original marker snapshotted into
+  `metadata.voice_marker`; inbound badged `input_kind=voice` for the ops inbox.
+  Defensive re-transcription also wired into the graph's `_ingest_node` + the
+  sync-fallback `run_agent_workflow` for direct callers. Tests: 7 unit (marker
+  parse + maybe_transcribe orchestration with mocked whisper) + 2 integration
+  (voice→vitals observation + voice badge; unavailable-transcription fallback).
+  555 unit pass; voice/vitals/inbox/clinical-alert integration green; ruff clean
+  (new files); no new lint on touched files. **Next: P4 pregnancy timeline.**
 - 2026-05-10 — **P2 vitals self-report: DONE.** New
   `services/orchestrator/vitals_handler.py` — regex parser for glucose / BP
   (→2 readings) / weight / HbA1c / peak-flow with plausibility ranges;
