@@ -8,7 +8,6 @@ from __future__ import annotations
 import types
 from datetime import datetime, timezone
 
-import pytest
 
 from app.db.models import AdherenceStatus
 from services.orchestrator import dose_handler
@@ -282,7 +281,7 @@ async def test_handle_late_taken_overrides_missed_to_taken(monkeypatch):
 async def test_late_taken_on_already_taken_is_noop(monkeypatch):
     """Tapping Mark-as-taken on an already-taken dose: idempotent, no DB
     change, friendly confirmation."""
-    captured = _stub_repos(
+    _stub_repos(
         monkeypatch,
         adherence=_adherence(status=AdherenceStatus.taken),
         patient=_patient(),

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from cryptography.fernet import Fernet, InvalidToken
 
 import pytest

@@ -6,9 +6,7 @@ Mocks DB session + repos so we cover only the action-routing logic.
 from __future__ import annotations
 
 import types
-from datetime import date, datetime, timezone
 
-import pytest
 
 from app.db.models import FollowupStatus
 from services.orchestrator import lab_handler

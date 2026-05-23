@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import types
 
-import pytest
 
 from app.db.models import RecapStatus
 from services.orchestrator import recap_handler

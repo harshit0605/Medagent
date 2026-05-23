@@ -297,14 +297,13 @@ async def test_sweep_materialises_for_tag_members():
         await db.commit()
         tag_id = tag.id
 
-        plan = await care_plans_repo.create(
+        await care_plans_repo.create(
             db,
             cohort_tag_id=tag_id,
             test_name=test_name,
             cadence_days=90,
         )
         await db.commit()
-        plan_id = plan.id
 
         patient = Patient(
             full_name=f"Sweep tag {suffix}",

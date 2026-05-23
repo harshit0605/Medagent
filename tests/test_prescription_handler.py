@@ -7,9 +7,7 @@ paths, and the patient ack copy. DB session is mocked.
 from __future__ import annotations
 
 import types
-from datetime import datetime, timezone
 
-import pytest
 
 from services.orchestrator import prescription_handler as h
 
@@ -180,7 +178,7 @@ async def test_handle_falls_back_when_vision_fails(monkeypatch):
 
 
 async def test_handle_illegible_image_uses_special_copy(monkeypatch):
-    captured = _stub_repos(
+    _stub_repos(
         monkeypatch,
         patient=_patient(),
         llm_result=_vision_result(illegible=True, regimens=[]),

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """LangGraph-aligned agent workflow for Medagent orchestrator (async).
 
 This module follows current agent best practices:
@@ -15,6 +13,8 @@ keyword logic on any failure (missing key, timeout, malformed output, or
 ``LLM_ENABLED=0``). The safety floor is ALWAYS the rule-based decision — the
 LLM may only escalate severity, never reduce it.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone

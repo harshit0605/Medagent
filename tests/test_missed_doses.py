@@ -10,7 +10,6 @@ from __future__ import annotations
 import types
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 from app.db.models import AdherenceStatus
 from services.scheduler import missed_doses

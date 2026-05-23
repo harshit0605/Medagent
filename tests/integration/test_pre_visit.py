@@ -230,10 +230,10 @@ async def test_pre_visit_summary_aggregates_full_patient_state(
     assert "Metformin" in regimen_names
 
     # Open lab followups — one overdue HbA1c.
-    lab_tests = [l["test_name"] for l in body["open_lab_followups"]]
+    lab_tests = [lab["test_name"] for lab in body["open_lab_followups"]]
     assert "HbA1c" in lab_tests
     overdue_labs = [
-        l for l in body["open_lab_followups"] if l["is_overdue"]
+        lab for lab in body["open_lab_followups"] if lab["is_overdue"]
     ]
     assert len(overdue_labs) >= 1
 

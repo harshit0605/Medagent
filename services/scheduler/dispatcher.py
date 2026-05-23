@@ -352,7 +352,6 @@ async def _build_refill_reminder(
     medication_name = payload.get("medication_name") or "your medication"
     dose = payload.get("dose") or ""
     days_left = payload.get("days_left")
-    stage = payload.get("stage", "d?")
     cycle_key = payload.get("cycle_key")
     if not regimen_id:
         raise ValueError(f"refill payload missing regimen_id: {payload}")
@@ -948,12 +947,9 @@ async def _build_appointment_reminder(
 
     appt_start = _ensure_utc(datetime.fromisoformat(appt_start_iso))
     when_local = appt_start.astimezone(tz).strftime("%a %d %b at %I:%M %p")
-    date_str = appt_start.astimezone(tz).strftime("%a %d %b")
-    time_str = appt_start.astimezone(tz).strftime("%I:%M %p") + f" ({tz_name})"
 
-    # ``when_phrase`` is used by the freeform body. The template path uses
-    # the more decomposed (date, time) pair below — Meta's library
-    # appointment_reminder template has separate {{date}} and {{text}} slots.
+    # ``when_phrase`` drives the freeform body; the template path builds its
+    # own ``when_phrase_template`` from the same ``when_local`` below.
     if event.event_type == "appointment_reminder_24h":
         when_phrase = f"tomorrow, {when_local} ({tz_name})"
     else:  # appointment_reminder_1h

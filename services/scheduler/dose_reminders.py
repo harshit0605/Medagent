@@ -35,7 +35,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
-    AdherenceEvent,
     AdherenceStatus,
     Patient,
     Regimen,

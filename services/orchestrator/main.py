@@ -1881,9 +1881,9 @@ async def get_pre_visit_summary(
     # Open lab followups.
     all_labs = await lab_followups_repo.list_for_patient(db, patient.id)
     open_labs = [
-        _lab_to_dto(l)
-        for l in all_labs
-        if l.status.value in ("due", "booked")
+        _lab_to_dto(lab)
+        for lab in all_labs
+        if lab.status.value in ("due", "booked")
     ]
 
     # Open ops tickets — by phone (the patient_id used in ops_tickets).
@@ -2155,7 +2155,9 @@ def _structured_to_dict(payload: RecapStructuredPayload) -> dict:
         "meds_added": [m.model_dump(exclude_none=True) for m in payload.meds_added],
         "meds_changed": [m.model_dump(exclude_none=True) for m in payload.meds_changed],
         "meds_stopped": [m.model_dump(exclude_none=True) for m in payload.meds_stopped],
-        "labs_ordered": [l.model_dump(exclude_none=True) for l in payload.labs_ordered],
+        "labs_ordered": [
+            lab.model_dump(exclude_none=True) for lab in payload.labs_ordered
+        ],
         "next_followup_in_days": payload.next_followup_in_days,
         "red_flags": list(payload.red_flags),
     }
@@ -5104,7 +5106,7 @@ async def get_patient_detail(
     refill_dtos = refill_dtos[:30]
 
     lab_rows = await lab_followups_repo.list_for_patient(db, patient_id)
-    lab_dtos = [_lab_to_dto(l) for l in lab_rows]
+    lab_dtos = [_lab_to_dto(lab) for lab in lab_rows]
 
     bot_paused_at = getattr(p, "bot_paused_at", None)
     if bot_paused_at is not None and bot_paused_at.tzinfo is None:

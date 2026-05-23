@@ -20,11 +20,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AdherenceStatus, OpsTicket, Regimen
+from app.db.models import AdherenceStatus, OpsTicket
 from app.db.repositories import adherence_events as adherence_events_repo
 from app.db.repositories import ops_tickets as ops_tickets_repo
 from app.db.repositories import patients as patients_repo

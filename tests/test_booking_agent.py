@@ -17,10 +17,8 @@ The tests assert:
 from __future__ import annotations
 
 import json
-from contextlib import asynccontextmanager
 from typing import Any
 
-import pytest
 
 
 # ---- shared fakes -----------------------------------------------------------
@@ -784,7 +782,6 @@ async def test_cancel_appointment_refuses_cross_patient(monkeypatch):
     must return ERROR — not silently cancel someone else's appointment."""
     from services.orchestrator.booking_agent import _tool_cancel_appointment
     from app.db.repositories import appointments as appt_repo
-    from app.db.repositories import doctors as doctors_repo
 
     appt = _FakeAppt(id=99, patient_id=42)  # belongs to patient 42
 

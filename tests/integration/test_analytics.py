@@ -19,17 +19,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db.models import (
-    AdherenceEvent,
-    AdherenceStatus,
     AppointmentRecap,
     Doctor,
     DoctorOAuthStatus,
-    InboundClassification,
-    OpsTicket,
-    OpsTicketStatus,
     Patient,
     RecapStatus,
-    Regimen,
 )
 from app.db.repositories import dashboard as dashboard_repo
 from app.db.session import get_sessionmaker
@@ -114,7 +108,7 @@ async def test_recap_funnel_excludes_old_recaps():
         db.add_all([patient, doctor])
         await db.flush()
         # Old recap: created_at and sent_at well past 30d ago.
-        old = AppointmentRecap(
+        AppointmentRecap(
             appointment_id=None if False else 1,  # nullable=False, use any id
             patient_id=patient.id,
             doctor_id=doctor.id,
@@ -160,7 +154,7 @@ async def test_window_cutoff_exact():
 async def test_recap_ack_rate_computed_correctly():
     """ack_rate = acknowledged / (sent + acknowledged + questioned).
     Drafts must NOT pollute the denominator."""
-    suffix = uuid.uuid4().hex[:8]
+    uuid.uuid4().hex[:8]
     SessionLocal = get_sessionmaker()
     async with SessionLocal() as db:
         # Use existing patient + doctor + appointment to avoid FK

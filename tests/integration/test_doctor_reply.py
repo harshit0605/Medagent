@@ -21,8 +21,6 @@ from sqlalchemy import select
 
 from app.db.models import (
     AuditRecord,
-    MessageDirection,
-    MessageLog,
     Patient,
     PatientInboundState,
 )

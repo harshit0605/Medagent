@@ -22,7 +22,6 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AdherenceStatus
 from app.db.repositories import adherence_events as adherence_events_repo
@@ -137,7 +136,7 @@ async def handle_dose_action(
         if adherence.status != AdherenceStatus.scheduled:
             already = adherence.status.value
             if already == "taken":
-                body = f"This dose is already logged as taken. ✓"
+                body = "This dose is already logged as taken. ✓"
                 buttons: list[dict[str, str]] = []
             else:
                 body = (

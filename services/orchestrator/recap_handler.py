@@ -29,10 +29,8 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
 from typing import Any
 
-from app.db.models import RecapStatus
 from app.db.repositories import appointment_recaps as appointment_recaps_repo
 from app.db.repositories import ops_tickets as ops_tickets_repo
 from app.db.repositories import patients as patients_repo

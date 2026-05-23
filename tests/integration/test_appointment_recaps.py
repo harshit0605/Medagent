@@ -167,7 +167,6 @@ async def test_recap_v2_template_injects_quick_reply_buttons(
     earlier in this file via the lock-after-send path; this test covers
     the v2 swap explicitly without depending on the default."""
     from services.orchestrator import main as orchestrator_main
-    from app.db.models import AppointmentRecap, RecapStatus
 
     captured: dict = {}
 
