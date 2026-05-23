@@ -154,6 +154,12 @@ class Patient(TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default=text("false")
     )
 
+    # Multi-patient household membership (nullable — most patients are
+    # standalone). SET NULL on household delete.
+    household_id: Mapped[int | None] = mapped_column(
+        ForeignKey("households.id", ondelete="SET NULL")
+    )
+
     # ISO-639-1 (with optional region) — e.g. ``en``, ``hi``, ``ta``,
     # ``en-IN``. Drives LLM-generated outbound copy (recaps, free-form
     # replies). Validated against an allowlist at the orchestrator
@@ -194,6 +200,9 @@ class Patient(TimestampMixin, Base):
     pregnancies: Mapped[list[Pregnancy]] = relationship(back_populates="patient")
     post_op_episodes: Mapped[list[PostOpEpisode]] = relationship(
         back_populates="patient"
+    )
+    household: Mapped[Household | None] = relationship(
+        back_populates="members"
     )
 
 
@@ -1736,4 +1745,21 @@ class PostOpEpisode(TimestampMixin, Base):
 
     patient: Mapped[Patient] = relationship(
         back_populates="post_op_episodes"
+    )
+
+
+class Household(TimestampMixin, Base):
+    """A multi-patient household. Groups several patients (members) under one
+    household so a caregiver can oversee 1→many. ``primary_caregiver_phone``
+    is the household-level point of contact."""
+
+    __tablename__ = "households"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    primary_caregiver_phone: Mapped[str | None] = mapped_column(String(32))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    members: Mapped[list[Patient]] = relationship(
+        back_populates="household"
     )
