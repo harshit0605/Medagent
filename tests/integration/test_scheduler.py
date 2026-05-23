@@ -100,35 +100,31 @@ def patient_id() -> str:
     return f"sched-{uuid.uuid4().hex[:10]}"
 
 
-class _BridgeAsyncClient:
-    """Replaces httpx.AsyncClient — bridges async ``post`` calls to a sync
-    TestClient so the gateway app actually handles the request and logs it."""
-
-    def __init__(self, *, gateway_client) -> None:
-        self._gw = gateway_client
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_a) -> None:
-        return None
-
-    async def post(self, url, json, **_kw):  # noqa: ARG002 — url + other kwargs ignored
-        # ``**_kw`` absorbs ``headers``, ``timeout``, etc. that
-        # real ``httpx.AsyncClient.post`` accepts but the
-        # in-process gateway TestClient doesn't need. Keeps
-        # the bridge stable across production-code changes
-        # that add new outbound-call kwargs.
-        return self._gw.post("/send", json=json)
-
-
 @pytest.fixture()
-def patch_dispatch_to_gateway(monkeypatch, gateway_client):
-    """Redirect the dispatcher's outbound POST to the in-process gateway TestClient."""
-    from services.scheduler import dispatcher as dispatcher_module
+def patch_dispatch_to_gateway(monkeypatch):
+    """Redirect the dispatcher's outbound POST to the in-process gateway app.
 
-    def factory(*_a, **_k):
-        return _BridgeAsyncClient(gateway_client=gateway_client)
+    Earlier this bridged to a *sync* gateway TestClient, but the dispatcher
+    runs inside the scheduler app's own event loop (driven by the scheduler
+    TestClient's BlockingPortal). Calling a sync TestClient from that loop
+    thread tripped anyio's "cannot be called from the event loop thread"
+    guard. The fix: route through the gateway's ASGI app with a *real,
+    async* ``httpx.AsyncClient`` backed by ``ASGITransport`` — it runs in
+    the same loop, no thread hop. We capture the genuine ``AsyncClient``
+    class before patching so the factory doesn't recurse into itself.
+    """
+    import httpx
+
+    from services.scheduler import dispatcher as dispatcher_module
+    from services.whatsapp_gateway.main import app as gateway_app
+
+    real_async_client = httpx.AsyncClient  # capture before monkeypatch
+    transport = httpx.ASGITransport(app=gateway_app)
+
+    def factory(*_a, **_k):  # noqa: ARG001 — dispatcher passes timeout=, ignored
+        return real_async_client(
+            transport=transport, base_url="http://gateway.test"
+        )
 
     monkeypatch.setattr(dispatcher_module.httpx, "AsyncClient", factory)
 
@@ -232,19 +228,6 @@ def test_tick_dispatches_due_events_and_marks_dispatched(
     assert matched, "expected refill_due_v1 outbound log row for this patient"
 
 
-@pytest.mark.skip(
-    reason=(
-        "Pre-existing test-infra flake: when prior pending "
-        "events leak past per-test cleanup, the dispatcher "
-        "fires the patched bridge which calls sync TestClient "
-        "from inside an async event loop, hitting "
-        "BlockingPortal's same-thread guard. The test logic "
-        "(future events excluded from fetch_due) is correct; "
-        "the bridge fixture needs a rework for the test to "
-        "be reliable in batch runs. Out of scope for slice 20 "
-        "(test-pollution cleanup)."
-    )
-)
 def test_future_event_is_not_dispatched_until_due(
     scheduler_client, patient_id, patch_dispatch_to_gateway
 ):

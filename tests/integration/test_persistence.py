@@ -87,15 +87,6 @@ def test_webhook_writes_inbound_to_message_log(gateway_client, patient_id):
     assert len(matched) == 1
 
 
-@pytest.mark.skipif(
-    os.getenv("MEDAGENT_TEST_LIVE_META", "0") != "1",
-    reason=(
-        "Test calls live Meta WhatsApp API which 400s on most dev "
-        "tokens (template not approved on this number, recipient not "
-        "whitelisted). Opt in with MEDAGENT_TEST_LIVE_META=1 when "
-        "running against a sandbox configured for it."
-    ),
-)
 def test_send_writes_outbound_to_message_log(gateway_client, patient_id):
     response = gateway_client.post(
         "/send",

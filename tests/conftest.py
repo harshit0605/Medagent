@@ -23,6 +23,16 @@ os.environ.setdefault("DB_POOL_SIZE", "10")
 os.environ.setdefault("DB_MAX_OVERFLOW", "10")
 os.environ.setdefault("DB_POOL_RECYCLE", "180")
 
+# Force the WhatsApp gateway into dry-run for the test session so /send
+# never hits the real Meta Graph API (which 4xx's on dev tokens / test
+# templates). Dry-run still writes the outbound to message_log and returns
+# a synthetic accepted result, so delivery-path assertions hold. HARD set
+# (not setdefault) — .env ships WHATSAPP_DRY_RUN=0 for real dev sends and
+# `source .env` exports it before pytest, so a default wouldn't win. Same
+# safety-override pattern as LLM_ENABLED below. To exercise a real sandbox
+# send, comment this out.
+os.environ["WHATSAPP_DRY_RUN"] = "1"
+
 # Disable the LLM by default for the test session — existing assertions
 # expect the deterministic rule-based outputs. Tests that exercise the LLM
 # (tests/integration/test_llm_workflow.py, tests/test_llm_unit.py) opt in

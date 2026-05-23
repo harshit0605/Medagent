@@ -32,7 +32,7 @@ The operational backbone is complete and on `main`:
 
 ## Open items (priority order)
 
-### P1 — 🔴 Refill emit/dispatch contract bug  · _task #7_
+### P1 — ✅ Refill emit/dispatch contract bug  · _task #7 — DONE_
 A real defect, not just test debt. `/emit-refill-due` (`RefillDueRequest`)
 doesn't accept `regimen_id`, but `services/scheduler/dispatcher.py` raises
 `"refill payload missing regimen_id"` and skips the event — so **refill
@@ -123,8 +123,14 @@ template exists with no flow.
   now carries `regimen_id` + `dose`; `/emit-refill-due` builds a
   dispatcher-shaped payload (`stage` key, `regimen_id`, `dose`);
   `test_tick_dispatches_due_events_and_marks_dispatched` unskipped + reworked
-  to seed a real patient+regimen. Verified: ruff clean, 537/539 unit tests
-  pass. ⚠️ Integration verification BLOCKED — Supabase project is **paused**
-  (pooler reachable but tenant not found); the 2 remaining unit failures are
-  `test_session.py` DB-connectivity tests, same cause. **Action needed: restore
-  the Supabase project** (dashboard) to run the integration suite.
+  to seed a real patient+regimen. (Integration was briefly blocked by a
+  Supabase auto-pause; restored.)
+- 2026-05-10 — **P1 DONE + bridge fix (task #14 partial).** Verified end-to-end
+  after DB restore. Three follow-on fixes uncovered during verification:
+  (1) `WHATSAPP_DRY_RUN=1` hard-set in conftest so gateway `/send` never hits
+  real Meta in tests (.env ships `=0` for dev sends); (2) reworked the scheduler
+  test bridge from a sync TestClient to a real async `httpx.ASGITransport` —
+  removes the BlockingPortal same-thread crash; (3) un-skipped BOTH previously
+  skipped scheduler tests + restored `test_persistence` Meta send test. Result:
+  `test_scheduler` 4/4, dispatch-path regression 27/27 green. **Next: P2 vitals
+  self-report.**
