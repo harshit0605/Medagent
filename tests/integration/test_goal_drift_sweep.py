@@ -185,6 +185,26 @@ def test_drift_greater_than_comparator_inverts_target_check():
     )
 
 
+def test_meets_consecutive_target():
+    now = datetime.now(timezone.utc)
+    goal = _make_goal()  # hba1c < 7.0
+    on = [
+        _make_obs("6.8", observed_at=now - timedelta(days=1)),
+        _make_obs("6.7", observed_at=now - timedelta(days=4)),
+        _make_obs("6.9", observed_at=now - timedelta(days=7)),
+    ]
+    assert goals_repo.meets_consecutive_target(goal, on, consecutive=3)
+    # One off-target in the window → not achieved.
+    mixed = [
+        _make_obs("6.8", observed_at=now - timedelta(days=1)),
+        _make_obs("7.4", observed_at=now - timedelta(days=4)),
+        _make_obs("6.9", observed_at=now - timedelta(days=7)),
+    ]
+    assert not goals_repo.meets_consecutive_target(goal, mixed, consecutive=3)
+    # Fewer than `consecutive` observations → not achieved (no lucky single).
+    assert not goals_repo.meets_consecutive_target(goal, on[:2], consecutive=3)
+
+
 # ---- sweep integration tests ----------------------------------------------
 
 
@@ -465,3 +485,64 @@ async def test_dto_drift_status_in_list_endpoint():
     rows = resp.json()
     target = next(r for r in rows if r["id"] == gid)
     assert target["drift_status"] == "slipping"
+
+
+async def test_sweep_auto_achieves_goal_on_consecutive_on_target():
+    """Three consecutive on-target observations flip the goal active →
+    achieved (and resolve any open drift ticket)."""
+    pid, phone, gid = await _seed_patient_with_goal()
+    await _seed_observations(
+        patient_id=pid,
+        goal_id=gid,
+        values_with_offsets=[("6.6", 1), ("6.7", 4), ("6.8", 7)],
+    )
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        result = await goal_drift_sweep.sweep_goal_drift(db)
+        await db.commit()
+    assert result["achieved"] >= 1
+
+    async with SessionLocal() as db:
+        goal = await goals_repo.get_goal(db, gid)
+    assert goal.status == "achieved"
+
+
+async def test_sweep_auto_achieve_resolves_open_drift_ticket():
+    """A goal that was drifting (ticket open) then strings together N
+    on-target readings is achieved AND its drift ticket auto-resolves."""
+    pid, phone, gid = await _seed_patient_with_goal()
+    # First: a persistent-off history opens a drift ticket.
+    await _seed_observations(
+        patient_id=pid,
+        goal_id=gid,
+        values_with_offsets=[("7.4", 20), ("7.5", 23), ("7.6", 26)],
+    )
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        await goal_drift_sweep.sweep_goal_drift(db)
+        await db.commit()
+    async with SessionLocal() as db:
+        ticket = await ops_tickets_repo.find_open_for_patient_category(
+            db, patient_id=phone, category=f"goal_drift:{gid}"
+        )
+    assert ticket is not None  # drift ticket opened
+
+    # Then: three fresh on-target readings → achieve + resolve the ticket.
+    await _seed_observations(
+        patient_id=pid,
+        goal_id=gid,
+        values_with_offsets=[("6.6", 0), ("6.7", 1), ("6.8", 2)],
+    )
+    async with SessionLocal() as db:
+        result = await goal_drift_sweep.sweep_goal_drift(db)
+        await db.commit()
+    assert result["achieved"] >= 1
+
+    async with SessionLocal() as db:
+        goal = await goals_repo.get_goal(db, gid)
+        ticket_after = await ops_tickets_repo.find_open_for_patient_category(
+            db, patient_id=phone, category=f"goal_drift:{gid}"
+        )
+    assert goal.status == "achieved"
+    assert ticket_after is None  # resolved

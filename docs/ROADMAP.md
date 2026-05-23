@@ -114,7 +114,7 @@ Now activated end-to-end.
 
 | Item | State | Evidence |
 |---|---|---|
-| 🟡 Goal auto-achievement (N consecutive on-target) | manual status only | `models.py:975` |
+| ✅ Goal auto-achievement (N consecutive on-target) | DONE — drift sweep flips active→achieved + resolves drift ticket | `goal_drift_sweep.py` |
 | 🟡 Clinical-alert on-call rota + multi-doctor escalation | re-pages same doctor; `is_on_call` boolean only | slice 11 |
 | 🟡 Calendar sync via webhook push | polling only | `calendar_sync_sweep.py:34` |
 | 🟡 Broadcast cohort-tag / composite filters | legacy 3 cohorts only | `broadcast_service.py:58` |

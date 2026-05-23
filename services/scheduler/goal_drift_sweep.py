@@ -88,9 +88,16 @@ async def sweep_goal_drift(
     now: datetime | None = None,
     window: int = 3,
     stale_after_days: int = 14,
+    consecutive_on_target: int = 3,
 ) -> dict[str, Any]:
     """One pass of the drift sweep. Returns a counter dict
     the scheduler logs as a heartbeat detail.
+
+    Also performs **goal auto-achievement**: a goal whose most recent
+    ``consecutive_on_target`` observations all meet target is flipped
+    active → achieved (and any open drift ticket auto-resolved). This is the
+    "the patient hit their target consistently" transition that previously
+    required a manual status change.
 
     Caller commits — the wrapper in
     ``services/scheduler/main.py`` commits after this returns.
@@ -100,12 +107,50 @@ async def sweep_goal_drift(
 
     opened = 0
     resolved = 0
+    achieved = 0
     by_drift: dict[str, int] = {}
+    # Pull enough history to evaluate both drift (window) and achievement
+    # (consecutive) in one query per goal.
+    fetch_limit = max(window, consecutive_on_target)
 
     for goal in goals:
         observations = await goals_repo.list_observations_for_goal(
-            session, goal.id, limit=window
+            session, goal.id, limit=fetch_limit
         )
+
+        # Auto-achievement wins over drift ticketing — a goal that's been
+        # on-target N times running is met, not drifting.
+        if goals_repo.meets_consecutive_target(
+            goal, observations, consecutive=consecutive_on_target
+        ):
+            await goals_repo.update_status(
+                session, goal.id, status="achieved"
+            )
+            achieved += 1
+            patient = await patients_repo.get(session, goal.patient_id)
+            if patient is not None and patient.phone:
+                existing = (
+                    await ops_tickets_repo.find_open_for_patient_category(
+                        session,
+                        patient_id=patient.phone,
+                        category=_category_for_goal(goal.id),
+                    )
+                )
+                if existing is not None:
+                    await ops_tickets_repo.resolve(
+                        session,
+                        existing.id,
+                        actor="goal_drift_sweep",
+                        notes="auto-resolved: goal achieved",
+                    )
+                    resolved += 1
+            log.info(
+                "goal auto-achieved: goal=%s (%s consecutive on-target)",
+                goal.id,
+                consecutive_on_target,
+            )
+            continue
+
         drift = goals_repo.evaluate_drift_status(
             goal,
             observations,
@@ -182,5 +227,6 @@ async def sweep_goal_drift(
         "goals_examined": len(goals),
         "opened": opened,
         "resolved": resolved,
+        "achieved": achieved,
         "by_drift": by_drift,
     }

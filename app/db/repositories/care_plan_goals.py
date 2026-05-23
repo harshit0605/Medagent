@@ -257,6 +257,26 @@ def _value_meets_target(
     return False
 
 
+def meets_consecutive_target(
+    goal: CarePlanGoal,
+    observations: list[MetricObservation],
+    *,
+    consecutive: int = 3,
+) -> bool:
+    """True when the most recent ``consecutive`` observations all meet the
+    goal's target (``observations`` newest-first). Powers auto-achievement:
+    N readings in a row on-target → the goal is met. Requires at least
+    ``consecutive`` observations so a single lucky reading doesn't flip it."""
+    if consecutive < 1 or len(observations) < consecutive:
+        return False
+    return all(
+        _value_meets_target(
+            value=o.value, comparator=goal.comparator, target=goal.target_value
+        )
+        for o in observations[:consecutive]
+    )
+
+
 def evaluate_drift_status(
     goal: CarePlanGoal,
     observations: list[MetricObservation],
