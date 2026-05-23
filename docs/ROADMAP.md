@@ -120,7 +120,7 @@ Now activated end-to-end.
 | ✅ Broadcast cohort-tag / composite filters | DONE — all_of/any_of composite + cohort_tag_id, 6 cohorts | `broadcast_service.py` |
 | 🔴 Multi-patient households | caregivers exist; no 1→many model | SoT V1 |
 | 🟡 Refill/delivery coordination (senior) | reminders only, no logistics | SoT §3E |
-| 🔴 Post-op completion checklist + wound-photo→queue | side-effect triage only | SoT §3D |
+| ✅ Post-op completion checklist + wound-photo→queue | DONE — `post_op_episodes` + day-N checklist materializer + `post_op_check_v1` + wound-photo→`wound_review` ticket | SoT §3D |
 | ✅ Patient-facing receipts | DONE — order delivery receipt (`order_receipt_v1`) on status→delivered | MVP #7 |
 | ✅ Proactive weekly-trend push (from P2) | DONE — opt-in sweep + `weekly_trend_v1`, deduped per 7d | `weekly_trend_sweep.py` |
 

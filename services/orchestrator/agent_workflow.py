@@ -452,6 +452,35 @@ async def run_agent_workflow(
                     ),
                 )
 
+    # Wound photo → review queue — sync-fallback parity with the graph router.
+    if inbound_text:
+        from services.orchestrator.wound_photo_handler import (
+            handle_wound_photo,
+            looks_like_wound_photo,
+        )
+
+        if looks_like_wound_photo(inbound_text):
+            delta = await handle_wound_photo(
+                patient_phone=patient_id, new_user_text=inbound_text
+            )
+            if delta is not None:
+                return WorkflowResult(
+                    intent="symptom_report",
+                    risk_level="low",
+                    use_template=False,
+                    policy_reason="wound_photo_received",
+                    policy_reason_codes=("wound_photo_received",),
+                    flow_action="ALLOW",
+                    escalation_required=False,
+                    escalation_reason=None,
+                    response_body=delta["response_body"],
+                    template_name=None,
+                    quick_replies=["CALL", "HELP"],
+                    audit_reasons=delta.get(
+                        "audit_reasons", ["wound_photo_received"]
+                    ),
+                )
+
     intent = await _detect_intent(inbound_text)
     decision = await _evaluate_policy_decision(
         patient_id=patient_id,
@@ -841,6 +870,23 @@ async def _order_handler_node(state: AgentState) -> dict[str, Any]:
     return delta
 
 
+async def _wound_photo_handler_node(state: AgentState) -> dict[str, Any]:
+    """Wound photo → wound_review ops ticket + ack. Skips intent/safety/LLM."""
+    from services.orchestrator.wound_photo_handler import handle_wound_photo
+
+    delta = await handle_wound_photo(
+        patient_phone=state.get("patient_id", ""),
+        new_user_text=state.get("text", ""),
+    )
+    if delta is None:
+        return {"audit_reasons": ["wound_photo_unrecognized"]}
+    delta.setdefault(
+        "messages", [{"role": "assistant", "content": delta["response_body"]}]
+    )
+    delta.setdefault("flow_action", "ALLOW")
+    return delta
+
+
 async def _optout_handler_node(state: AgentState) -> dict[str, Any]:
     """STOP / START keyword inbound. Routes to handle_optout when the
     inbound looks like opt-out, handle_optin otherwise (the router
@@ -937,6 +983,9 @@ def _route_for_onboarding(
         looks_like_side_effect_report,
     )
     from services.orchestrator.vitals_handler import looks_like_vitals_log
+    from services.orchestrator.wound_photo_handler import (
+        looks_like_wound_photo,
+    )
 
     text = state.get("text", "")
 
@@ -952,6 +1001,8 @@ def _route_for_onboarding(
 
     if looks_like_prescription_upload(text):
         return "prescription_handler"
+    if looks_like_wound_photo(text):
+        return "wound_photo_handler"
     if looks_like_dose_action(text):
         return "dose_handler"
     if looks_like_refill_action(text):
@@ -1164,6 +1215,7 @@ def build_langgraph_workflow(
     graph.add_node("vitals_handler", _vitals_handler_node)
     graph.add_node("asthma_handler", _asthma_handler_node)
     graph.add_node("order_handler", _order_handler_node)
+    graph.add_node("wound_photo_handler", _wound_photo_handler_node)
     graph.add_node("detect_intent", _detect_intent_node)
     graph.add_node("policy", _policy_node)
     graph.add_node("safety", _safety_node)
@@ -1192,6 +1244,7 @@ def build_langgraph_workflow(
             "vitals_handler": "vitals_handler",
             "asthma_handler": "asthma_handler",
             "order_handler": "order_handler",
+            "wound_photo_handler": "wound_photo_handler",
             "lookup_handler": "lookup_handler",
             "detect_intent": "detect_intent",
         },
@@ -1222,6 +1275,7 @@ def build_langgraph_workflow(
     graph.add_edge("vitals_handler", END)
     graph.add_edge("asthma_handler", END)
     graph.add_edge("order_handler", END)
+    graph.add_edge("wound_photo_handler", END)
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer)

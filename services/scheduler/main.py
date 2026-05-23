@@ -26,6 +26,7 @@ from services.scheduler import (
     goal_drift_sweep,
     lab_followups,
     missed_doses,
+    post_op_checklist,
     pregnancy_milestones,
     recap_sweeps,
     refill_reminders,
@@ -249,6 +250,7 @@ async def _run_dose_materialize_once() -> dict[str, Any]:
             ("refill", refill_reminders.materialize_for_all_active_regimens),
             ("lab", lab_followups.materialize_for_all_open),
             ("pregnancy", pregnancy_milestones.materialize_for_all_active),
+            ("post_op", post_op_checklist.materialize_for_all_active),
         ):
             try:
                 out.update(await runner(db))

@@ -192,6 +192,9 @@ class Patient(TimestampMixin, Base):
     alerts: Mapped[list[Alert]] = relationship(back_populates="patient")
     orders: Mapped[list[Order]] = relationship(back_populates="patient")
     pregnancies: Mapped[list[Pregnancy]] = relationship(back_populates="patient")
+    post_op_episodes: Mapped[list[PostOpEpisode]] = relationship(
+        back_populates="patient"
+    )
 
 
 class Caregiver(TimestampMixin, Base):
@@ -1699,4 +1702,38 @@ class AsthmaTriggerLog(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class PostOpEpisode(TimestampMixin, Base):
+    """A post-surgical recovery episode, anchored on the surgery date.
+
+    Drives day-N checklist reminders (wound check, suture removal, follow-up)
+    plus a wound-photo review prompt. ``status`` (active | ended) is a plain
+    String; a partial unique index (migration 0041) enforces one active
+    episode per patient.
+    """
+
+    __tablename__ = "post_op_episodes"
+    __table_args__ = (
+        Index(
+            "ix_post_op_episodes_patient_status", "patient_id", "status"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[int] = mapped_column(
+        ForeignKey("patients.id", ondelete="CASCADE"), nullable=False
+    )
+    procedure_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    surgery_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active"
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ended_reason: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    patient: Mapped[Patient] = relationship(
+        back_populates="post_op_episodes"
     )

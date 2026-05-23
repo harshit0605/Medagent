@@ -59,6 +59,7 @@ _SUBSTITUTION_EVENT_TYPES: frozenset[str] = frozenset(
 )
 _ORDER_RECEIPT_EVENT_TYPES: frozenset[str] = frozenset({"order_receipt"})
 _WEEKLY_TREND_EVENT_TYPES: frozenset[str] = frozenset({"weekly_trend_push"})
+_POST_OP_EVENT_TYPES: frozenset[str] = frozenset({"post_op_check_due"})
 
 # How late a reminder can be before we drop it as stale. T-1h has a much
 # tighter window — a "1 hour before" reminder that arrives 45 minutes after
@@ -88,6 +89,8 @@ _FRESHNESS_BY_EVENT: dict[str, timedelta] = {
     "order_receipt": timedelta(hours=72),
     # A weekly trend nudge is only meaningful within its week.
     "weekly_trend_push": timedelta(hours=36),
+    # Post-op checks are forgiving — a wound-check nudge a day late still helps.
+    "post_op_check_due": timedelta(hours=48),
 }
 
 # Approved Meta template name for outside-CSW APPOINTMENT reminders.
@@ -144,6 +147,11 @@ _ORDER_RECEIPT_TEMPLATE_NAME = os.getenv(
 # (the multi-line per-metric summary).
 _WEEKLY_TREND_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_WEEKLY_TREND_TEMPLATE_NAME", "weekly_trend_v1"
+)
+# Approved Meta template for outside-CSW post-op checklist reminders. 2 body
+# params (post-op day, the checklist item description).
+_POST_OP_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_POST_OP_TEMPLATE_NAME", "post_op_check_v1"
 )
 # Test override: set WHATSAPP_FORCE_REMINDER_TEMPLATE=1 to always use the
 # template path (handy for verifying the outside-CSW route while the patient
@@ -805,6 +813,60 @@ async def _build_order_receipt(
     }
 
 
+async def _build_post_op_check(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Render a post-op checklist reminder. Ends if the episode is closed.
+
+    The wound-photo item invites the patient to reply with a photo (which the
+    orchestrator routes to the wound-review queue). In-CSW: freeform; out:
+    ``post_op_check_v1`` template (post-op day + item)."""
+    from app.db.repositories import post_op as post_op_repo
+
+    payload = dict(event.payload or {})
+    episode_id = payload.get("episode_id")
+    if not episode_id:
+        raise ValueError("post-op payload missing episode_id")
+    episode = await post_op_repo.get(db, int(episode_id))
+    if episode is None:
+        raise ReminderNotApplicable(f"post-op episode {episode_id} not found")
+    if episode.status != "active":
+        raise ReminderNotApplicable(
+            f"post-op episode {episode_id} is {episode.status} — not prompting"
+        )
+
+    day = payload.get("post_op_day")
+    title = payload.get("title") or "a recovery check"
+    detail = payload.get("detail") or ""
+    is_wound_photo = payload.get("check_key") == "wound_photo"
+
+    if is_wound_photo:
+        body = (
+            f"Day {day} after your {episode.procedure_name}: please reply with "
+            f"{detail}. If you can't, reply HELP and we'll arrange a check."
+        )
+    else:
+        body = (
+            f"Day {day} after your {episode.procedure_name}: time for {title} — "
+            f"{detail}. Reply HELP if you have any concerns."
+        )
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+        }
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _POST_OP_TEMPLATE_NAME,
+        "template_params": {"1_day": str(day), "2_item": f"{title}: {detail}"},
+    }
+
+
 async def _build_weekly_trend(
     db: AsyncSession, event: ScheduledEvent
 ) -> dict[str, Any]:
@@ -1331,6 +1393,12 @@ async def dispatch(
                     f"weekly trend dispatch requires db (event {event.id})"
                 )
             message = await _build_weekly_trend(db, event)
+        elif event.event_type in _POST_OP_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"post-op dispatch requires db (event {event.id})"
+                )
+            message = await _build_post_op_check(db, event)
         else:
             message = _build_message_out(event)
     except ReminderNotApplicable as exc:

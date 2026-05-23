@@ -1,0 +1,19 @@
+{
+  "name": "post_op_check_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Day {{1}} of your recovery: {{2}}. Reply HELP if you have any concerns.",
+      "example": {
+        "body_text": [
+          [
+            "3",
+            "Wound check: signs of infection — redness, swelling, discharge, or fever"
+          ]
+        ]
+      }
+    }
+  ]
+}
