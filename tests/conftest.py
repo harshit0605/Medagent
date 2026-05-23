@@ -269,3 +269,44 @@ def _cleanup_accumulated_test_rows():
             f"[conftest] test-row cleanup failed (non-fatal): {exc}"
         )
     yield
+
+
+# Test modules that run global-state sweeps (scan whole tables). Two of these
+# running at once cross-contaminate each other's counts, so they're pinned to a
+# single xdist worker. Add a module here (or tag a test ``@pytest.mark.serial``)
+# when it asserts on table-wide aggregates rather than its own seeded rows.
+_SERIAL_MODULES: frozenset[str] = frozenset(
+    {
+        "test_goal_drift_sweep",
+        "test_adherence_pattern_sweep",
+        "test_care_gaps",
+        "test_recap_sweeps",
+        "test_service_health_reconciler",
+        "test_weekly_trend",
+        "test_clinical_alert_pager",  # the re-page sweep scans all unacked alerts
+    }
+)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Pin global-state tests to a single xdist group.
+
+    The integration suite shares one remote Postgres. Most tests seed
+    uniquely-suffixed rows and assert on those specific rows, so they're
+    parallel-safe. The exceptions are *global-state* sweeps that scan whole
+    tables — running two of those at once cross-contaminates counts.
+
+    We auto-tag the known sweep modules (``_SERIAL_MODULES``) plus any test
+    explicitly marked ``@pytest.mark.serial`` and give them a shared
+    ``xdist_group``. Under ``pytest -n auto --dist loadgroup`` they all route
+    to ONE worker (serial relative to each other) while the rest of the suite
+    fans out. No-op on a non-xdist run.
+    """
+    for item in items:
+        explicit = item.get_closest_marker("serial") is not None
+        in_serial_module = any(
+            f"{mod}.py::" in item.nodeid for mod in _SERIAL_MODULES
+        )
+        if explicit or in_serial_module:
+            item.add_marker(pytest.mark.serial)
+            item.add_marker(pytest.mark.xdist_group("serial"))

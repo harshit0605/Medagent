@@ -29,6 +29,7 @@ dependencies = [
 dev = [
   "pytest>=8.2.0",
   "pytest-asyncio>=0.24",
+  "pytest-xdist>=3.6",
   "ruff>=0.5.0",
 ]
 # Local, on-host voice-note transcription (WhatsApp voice notes → text).
@@ -46,6 +47,9 @@ packages = ["app", "services", "shared"]
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+  "serial: touches global DB state (full-table sweeps over the shared remote DB). Auto-pinned to one xdist worker via the conftest hook so parallel runs don't cross-contaminate sweep counts. Run the suite parallel with: pytest -n auto --dist loadgroup",
+]
 
 [tool.ruff]
 line-length = 100

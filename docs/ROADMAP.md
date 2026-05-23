@@ -126,11 +126,21 @@ Now activated end-to-end.
 
 ---
 
-## Test / infra debt  · _task #14_
-- 🔴 Full 48-file integration suite >1.5h over Supabase; hangs on global-state
-  tests. Needs `pytest-xdist` per-worker isolation or local-Postgres path.
-- 🟡 2 skipped scheduler tests (one = the P1 refill bug; one = bridge-fixture
-  threading rework).
+## Test / infra debt  · _task #14 — DONE_
+- ✅ **Parallelism via `pytest-xdist`.** Added `pytest-xdist` to the `dev`
+  extra + registered a `serial` marker. A `conftest` collection hook
+  auto-tags the global-state sweep modules (goal-drift, adherence-pattern,
+  care-gaps, recap, service-health, weekly-trend, clinical-alert-pager) — the
+  ones that scan whole tables and would cross-contaminate counts — plus any
+  `@pytest.mark.serial` test, and assigns them a shared `xdist_group`. The
+  rest of the suite (uniquely-suffixed, per-entity tests) fans out safely.
+  - **Run parallel:** `pytest -n auto --dist loadgroup` (serial sweeps pinned
+    to one worker; everything else parallel). Verified: 589 unit pass under
+    `-n auto`; a mixed integration subset (parallel + serial) green under
+    `-n 4 --dist loadgroup`.
+- ✅ **Skipped scheduler tests** — both were un-skipped in P1 (refill contract
+  + bridge-fixture rework). No debt skips remain (only 2 benign runtime
+  `pytest.skip` precondition-guards in `test_analytics.py`).
 
 ---
 
