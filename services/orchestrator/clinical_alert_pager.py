@@ -86,25 +86,42 @@ async def _pick_recent_appointment_doctor(
 
 
 async def pick_doctor_for_alert(
-    session: AsyncSession, alert: ClinicalAlert
+    session: AsyncSession,
+    alert: ClinicalAlert,
+    *,
+    escalation_level: int = 0,
 ) -> Doctor | None:
     """Apply the selection rule. Returns the chosen doctor or
     None when no one's reachable.
 
     A doctor without a ``phone`` is never returned — there's
     no point picking a paging target we can't actually page.
+
+    Multi-doctor escalation (on-call rota): ``escalation_level`` is the count
+    of prior page attempts. On the FIRST page (level 0) we prefer the patient's
+    recent-appointment doctor, falling back to the first on-call doctor. On
+    each RE-page (level ≥ 1) we escalate through the on-call rota (ordered by
+    id), round-robin, EXCLUDING the doctor we last paged — so an unanswered
+    critical alert reaches a different person. With a single on-call doctor we
+    re-page them (better than going silent).
     """
-    primary = await _pick_recent_appointment_doctor(
-        session, patient_id=alert.patient_id
-    )
-    if primary is not None and primary.phone:
-        return primary
-    on_call = await doctors_repo.list_on_call(session)
+    on_call = [d for d in await doctors_repo.list_on_call(session) if d.phone]
     on_call.sort(key=lambda d: d.id)
-    for doc in on_call:
-        if doc.phone:
-            return doc
-    return None
+
+    if escalation_level <= 0:
+        primary = await _pick_recent_appointment_doctor(
+            session, patient_id=alert.patient_id
+        )
+        if primary is not None and primary.phone:
+            return primary
+        return on_call[0] if on_call else None
+
+    if not on_call:
+        return None
+    # Escalate to a NEW on-call doctor where possible.
+    candidates = [d for d in on_call if d.id != alert.paged_doctor_id]
+    pool = candidates or on_call
+    return pool[(escalation_level - 1) % len(pool)]
 
 
 def _format_page_body(alert: ClinicalAlert, doctor: Doctor) -> str:
@@ -231,7 +248,9 @@ async def page_alert(
     # the post-increment value and we'd double-count.
     prior_attempts = alert.paged_attempts or 0
 
-    doctor = await pick_doctor_for_alert(session, alert)
+    doctor = await pick_doctor_for_alert(
+        session, alert, escalation_level=prior_attempts
+    )
     if doctor is None or not doctor.phone:
         # Stamp the no-doctor attempt — the cap will eventually
         # stop the re-page sweep from looping. Ops sees the

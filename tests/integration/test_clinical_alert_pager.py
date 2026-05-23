@@ -884,3 +884,48 @@ async def test_route_high_severity_does_not_enqueue_paging(
         # No paging event should reference any of the high-severity alerts.
         for e in events:
             assert (e.payload or {}).get("alert_id") not in alert_ids
+
+
+# ---- on-call rota escalation (task #13) ------------------------------------
+
+
+async def test_escalation_picks_a_different_on_call_doctor():
+    """On a re-page (escalation_level >= 1) the rota must escalate to a NEW
+    on-call doctor — never the one we already paged."""
+    pid, phone, doc_a, _ = await _seed_patient_and_doctor(on_call=True)
+    await _seed_patient_and_doctor(on_call=True)  # a second on-call doctor
+    alert_id = await _seed_alert(patient_id=pid, phone=phone)
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        # Pretend doctor A was paged on the first attempt.
+        await clinical_alerts_repo.mark_paged(db, alert_id, doctor_id=doc_a)
+        await db.commit()
+
+    async with SessionLocal() as db:
+        alert = await clinical_alerts_repo.get(db, alert_id)
+        chosen = await clinical_alert_pager.pick_doctor_for_alert(
+            db, alert, escalation_level=1
+        )
+    assert chosen is not None
+    assert chosen.is_on_call is True
+    assert chosen.phone is not None
+    assert chosen.id != doc_a  # escalated to someone new
+
+
+async def test_escalation_level_zero_unchanged_prefers_primary():
+    """Level 0 (first page) behaviour is unchanged: the patient's recent
+    appointment doctor wins over the on-call rota."""
+    pid, phone, primary_id, _ = await _seed_patient_and_doctor()
+    await _seed_patient_and_doctor(on_call=True)  # an on-call alternative
+    await _seed_appointment(patient_id=pid, doctor_id=primary_id)
+    alert_id = await _seed_alert(patient_id=pid, phone=phone)
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        alert = await clinical_alerts_repo.get(db, alert_id)
+        chosen = await clinical_alert_pager.pick_doctor_for_alert(
+            db, alert, escalation_level=0
+        )
+    assert chosen is not None
+    assert chosen.id == primary_id
