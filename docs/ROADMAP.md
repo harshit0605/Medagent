@@ -121,7 +121,7 @@ Now activated end-to-end.
 | 🔴 Multi-patient households | caregivers exist; no 1→many model | SoT V1 |
 | 🟡 Refill/delivery coordination (senior) | reminders only, no logistics | SoT §3E |
 | 🔴 Post-op completion checklist + wound-photo→queue | side-effect triage only | SoT §3D |
-| 🟡 Patient-facing receipts | audit trail exists; receipts unclear | MVP #7 |
+| ✅ Patient-facing receipts | DONE — order delivery receipt (`order_receipt_v1`) on status→delivered | MVP #7 |
 
 ---
 

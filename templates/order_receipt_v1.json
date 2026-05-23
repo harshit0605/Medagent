@@ -1,0 +1,19 @@
+{
+  "name": "order_receipt_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Delivered: {{1}}. Order ref {{2}}. Keep this as your receipt — reply HELP if anything's wrong with your order.",
+      "example": {
+        "body_text": [
+          [
+            "Metformin (500 mg)",
+            "ORD-1042"
+          ]
+        ]
+      }
+    }
+  ]
+}

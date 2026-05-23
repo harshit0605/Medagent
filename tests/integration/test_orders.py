@@ -312,3 +312,56 @@ async def test_route_order_action_end_to_end(orchestrator_client):
     async with SessionLocal() as db:
         order = await orders_repo.get(db, order_id)
     assert order.substitution_status == "approved"
+
+
+# ---- delivery receipts (MVP #7) --------------------------------------------
+
+
+async def test_status_delivered_enqueues_receipt_once(orchestrator_client):
+    pid, phone, regimen_id = await _seed_patient_regimen()
+    order_id = await _make_order(pid, regimen_id)
+
+    resp = orchestrator_client.post(
+        f"/orders/{order_id}/status", json={"status": "delivered"}
+    )
+    assert resp.status_code == 200
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        stmt = (
+            select(ScheduledEvent)
+            .where(ScheduledEvent.patient_id == phone)
+            .where(ScheduledEvent.event_type == "order_receipt")
+        )
+        events = list((await db.execute(stmt)).scalars().all())
+    assert len(events) == 1
+    assert events[0].payload["order_id"] == order_id
+
+    # Re-setting delivered must NOT enqueue a second receipt.
+    orchestrator_client.post(
+        f"/orders/{order_id}/status", json={"status": "delivered"}
+    )
+    async with SessionLocal() as db:
+        events2 = list(
+            (await db.execute(stmt)).scalars().all()
+        )
+    assert len(events2) == 1
+
+
+async def test_dispatcher_builds_order_receipt_template():
+    pid, phone, regimen_id = await _seed_patient_regimen()
+    order_id = await _make_order(pid, regimen_id)
+
+    event = SimpleNamespace(
+        id=8001,
+        event_type="order_receipt",
+        patient_id=phone,
+        payload={"order_id": order_id},
+    )
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        msg = await dispatcher._build_order_receipt(db, event)
+    assert msg["use_template"] is True
+    assert msg["template_name"] == "order_receipt_v1"
+    assert msg["template_params"]["2_ref"] == f"ORD-{order_id}"
+    assert "Atorvastatin" in msg["template_params"]["1_med"]

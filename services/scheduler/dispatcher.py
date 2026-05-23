@@ -57,6 +57,7 @@ _PREGNANCY_WEEKLY_EVENT_TYPES: frozenset[str] = frozenset(
 _SUBSTITUTION_EVENT_TYPES: frozenset[str] = frozenset(
     {"order_substitution_request"}
 )
+_ORDER_RECEIPT_EVENT_TYPES: frozenset[str] = frozenset({"order_receipt"})
 
 # How late a reminder can be before we drop it as stale. T-1h has a much
 # tighter window — a "1 hour before" reminder that arrives 45 minutes after
@@ -82,6 +83,8 @@ _FRESHNESS_BY_EVENT: dict[str, timedelta] = {
     # A substitution request stays useful for a while — the patient's reorder
     # is blocked until they decide.
     "order_substitution_request": timedelta(hours=48),
+    # A delivery receipt is informational — still worth sending if delayed.
+    "order_receipt": timedelta(hours=72),
 }
 
 # Approved Meta template name for outside-CSW APPOINTMENT reminders.
@@ -128,6 +131,11 @@ _PREGNANCY_TEMPLATE_NAME = os.getenv(
 # quick-reply buttons.
 _SUBSTITUTION_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_SUBSTITUTION_TEMPLATE_NAME", "substitution_approval_v1"
+)
+# Approved Meta template for outside-CSW order delivery receipts. 2 body
+# params (medication label, order reference).
+_ORDER_RECEIPT_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_ORDER_RECEIPT_TEMPLATE_NAME", "order_receipt_v1"
 )
 # Test override: set WHATSAPP_FORCE_REMINDER_TEMPLATE=1 to always use the
 # template path (handy for verifying the outside-CSW route while the patient
@@ -744,6 +752,51 @@ async def _build_substitution_request(
     }
 
 
+async def _build_order_receipt(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Patient-facing delivery receipt for a fulfilled order (MVP #7).
+
+    In-CSW: freeform text. Out-of-CSW: ``order_receipt_v1`` template (med
+    label + order reference).
+    """
+    from app.db.repositories import orders as orders_repo
+
+    payload = dict(event.payload or {})
+    order_id = payload.get("order_id")
+    if not order_id:
+        raise ValueError("order receipt payload missing order_id")
+    order = await orders_repo.get(db, int(order_id))
+    if order is None:
+        raise ReminderNotApplicable(f"order {order_id} not found")
+
+    med_label = (
+        f"{order.medication_name} ({order.dose})"
+        if order.dose
+        else order.medication_name
+    )
+    order_ref = f"ORD-{order.id}"
+    body = (
+        f"Delivered: {med_label}. Order ref {order_ref}. Keep this as your "
+        f"receipt — reply HELP if anything's wrong with your order."
+    )
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+        }
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _ORDER_RECEIPT_TEMPLATE_NAME,
+        "template_params": {"1_med": med_label, "2_ref": order_ref},
+    }
+
+
 async def _patient_in_csw(db: AsyncSession, patient_phone: str) -> bool:
     """True if the patient has messaged us within the WhatsApp 24h CSW.
 
@@ -1219,6 +1272,12 @@ async def dispatch(
                     f"substitution dispatch requires db (event {event.id})"
                 )
             message = await _build_substitution_request(db, event)
+        elif event.event_type in _ORDER_RECEIPT_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"order receipt dispatch requires db (event {event.id})"
+                )
+            message = await _build_order_receipt(db, event)
         else:
             message = _build_message_out(event)
     except ReminderNotApplicable as exc:

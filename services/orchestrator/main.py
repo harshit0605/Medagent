@@ -6213,15 +6213,33 @@ async def update_order_status(
     body: OrderStatusRequest,
     db: AsyncSession = Depends(get_session),
 ) -> OrderDTO:
-    """Advance an order's fulfillment status (ops console / partner webhook)."""
+    """Advance an order's fulfillment status (ops console / partner webhook).
+    On the transition into ``delivered`` we enqueue a patient-facing delivery
+    receipt (MVP #7)."""
     from app.db.repositories import orders as orders_repo
+
+    existing = await orders_repo.get(db, order_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="order not found")
+    was_delivered = existing.status == "delivered"
 
     try:
         row = await orders_repo.set_status(db, order_id, status=body.status)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    if row is None:
-        raise HTTPException(status_code=404, detail="order not found")
+
+    # First transition into "delivered" → send a receipt.
+    if body.status == "delivered" and not was_delivered:
+        patient = await patients_repo.get(db, row.patient_id)
+        if patient is not None and patient.phone:
+            await scheduled_events_repo.enqueue(
+                db,
+                event_type="order_receipt",
+                patient_id=patient.phone,
+                payload={"order_id": row.id},
+                scheduled_for=datetime.now(timezone.utc),
+            )
+
     dto = _order_to_dto(row)
     await db.commit()
     return dto
