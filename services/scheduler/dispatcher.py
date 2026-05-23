@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AppointmentStatus, ScheduledEvent
+from app.db.models import AppointmentStatus, Patient, ScheduledEvent
 from app.db.repositories import appointments as appointments_repo
 from app.db.repositories import doctors as doctors_repo
 from app.db.repositories import patient_inbound as patient_inbound_repo
@@ -48,6 +48,12 @@ _DOSE_EVENT_TYPES: frozenset[str] = frozenset({"dose_due"})
 _REFILL_EVENT_TYPES: frozenset[str] = frozenset({"refill_due"})
 _LAB_EVENT_TYPES: frozenset[str] = frozenset({"lab_followup_due"})
 _RECAP_NUDGE_EVENT_TYPES: frozenset[str] = frozenset({"recap_ack_nudge"})
+_PREGNANCY_MILESTONE_EVENT_TYPES: frozenset[str] = frozenset(
+    {"pregnancy_milestone_due"}
+)
+_PREGNANCY_WEEKLY_EVENT_TYPES: frozenset[str] = frozenset(
+    {"pregnancy_weekly_due"}
+)
 
 # How late a reminder can be before we drop it as stale. T-1h has a much
 # tighter window — a "1 hour before" reminder that arrives 45 minutes after
@@ -66,6 +72,10 @@ _FRESHNESS_BY_EVENT: dict[str, timedelta] = {
     # An ack-nudge that's a couple of days late is still meaningful —
     # the patient still hasn't acknowledged the underlying recap.
     "recap_ack_nudge": timedelta(hours=48),
+    # Pregnancy reminders are forgiving — a "book your anomaly scan" nudge or
+    # a weekly check-in a day or two late is still useful.
+    "pregnancy_milestone_due": timedelta(hours=48),
+    "pregnancy_weekly_due": timedelta(hours=48),
 }
 
 # Approved Meta template name for outside-CSW APPOINTMENT reminders.
@@ -99,6 +109,13 @@ _REFILL_TEMPLATE_NAME = os.getenv(
 # override.
 _LAB_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_LAB_TEMPLATE_NAME", "lab_closure_update_v1"
+)
+# Approved Meta template for outside-CSW pregnancy reminders (weekly check-ins
+# AND milestone nudges share it). 3 body params: patient name, gestational
+# week, and the focus/update line. Override via env to point at a different
+# approved template; the param shape (1_name / 2_week / 3_focus) is fixed.
+_PREGNANCY_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_PREGNANCY_TEMPLATE_NAME", "pregnancy_weekly_v1"
 )
 # Test override: set WHATSAPP_FORCE_REMINDER_TEMPLATE=1 to always use the
 # template path (handy for verifying the outside-CSW route while the patient
@@ -487,6 +504,143 @@ async def _build_lab_followup_reminder(
         "use_template": True,
         "template_name": _LAB_TEMPLATE_NAME,
         "template_params": {"1_test": test_name},
+    }
+
+
+async def _patient_first_name(
+    db: AsyncSession, *, patient_db_id: Any, patient_phone: str
+) -> str:
+    """Resolve a friendly first name for pregnancy copy, or 'there'."""
+    patient = None
+    if patient_db_id is not None:
+        patient = await db.get(Patient, int(patient_db_id))
+    if patient is None:
+        patient = await patients_repo.get_by_phone(db, patient_phone)
+    if patient is not None and patient.full_name:
+        return patient.full_name.strip().split()[0]
+    return "there"
+
+
+async def _assert_pregnancy_active(db: AsyncSession, pregnancy_id: Any):
+    """Fetch the pregnancy and confirm it's still active, else
+    ReminderNotApplicable (a delivered/ended pregnancy shouldn't nudge)."""
+    from app.db.repositories import pregnancies as pregnancies_repo
+
+    if not pregnancy_id:
+        raise ValueError("pregnancy payload missing pregnancy_id")
+    pregnancy = await pregnancies_repo.get(db, int(pregnancy_id))
+    if pregnancy is None:
+        raise ReminderNotApplicable(f"pregnancy {pregnancy_id} not found")
+    if pregnancy.status != "active":
+        raise ReminderNotApplicable(
+            f"pregnancy {pregnancy_id} is {pregnancy.status} — not prompting"
+        )
+    return pregnancy
+
+
+async def _build_pregnancy_weekly_reminder(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Build the WhatsApp send for a pregnancy_weekly_due check-in.
+
+    In-CSW: freeform text. Out-of-CSW: ``pregnancy_weekly_v1`` template
+    (params: name, gestational week, this-week's focus line).
+    """
+    payload = dict(event.payload or {})
+    await _assert_pregnancy_active(db, payload.get("pregnancy_id"))
+
+    week = payload.get("ga_week")
+    focus = payload.get("focus") or ""
+    name = await _patient_first_name(
+        db,
+        patient_db_id=payload.get("patient_db_id"),
+        patient_phone=event.patient_id,
+    )
+
+    body = (
+        f"Hi {name}, you're in week {week} of your pregnancy. {focus}".strip()
+    )
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+        }
+
+    log.info(
+        "pregnancy weekly %s: out-of-CSW for patient %s — using template %s",
+        event.id,
+        event.patient_id,
+        _PREGNANCY_TEMPLATE_NAME,
+    )
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _PREGNANCY_TEMPLATE_NAME,
+        "template_params": {
+            "1_name": name,
+            "2_week": str(week),
+            "3_focus": focus,
+        },
+    }
+
+
+async def _build_pregnancy_milestone_reminder(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Build the WhatsApp send for a pregnancy_milestone_due reminder
+    (ANC visit / lab / scan / supplement).
+
+    In-CSW: freeform text. Out-of-CSW: the shared ``pregnancy_weekly_v1``
+    template, with the milestone rendered into the focus param.
+    """
+    payload = dict(event.payload or {})
+    await _assert_pregnancy_active(db, payload.get("pregnancy_id"))
+
+    week = payload.get("ga_week")
+    title = payload.get("title") or "an antenatal milestone"
+    detail = payload.get("detail") or ""
+    name = await _patient_first_name(
+        db,
+        patient_db_id=payload.get("patient_db_id"),
+        patient_phone=event.patient_id,
+    )
+
+    focus = f"{title}: {detail}." if detail else f"{title}."
+    body = (
+        f"Hi {name}, you're around week {week} — time for {title.lower()}"
+        + (f" ({detail})" if detail else "")
+        + ". Reply HELP if you'd like us to help arrange it."
+    )
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+        }
+
+    log.info(
+        "pregnancy milestone %s (%s): out-of-CSW for patient %s — template %s",
+        event.id,
+        payload.get("milestone_key"),
+        event.patient_id,
+        _PREGNANCY_TEMPLATE_NAME,
+    )
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _PREGNANCY_TEMPLATE_NAME,
+        "template_params": {
+            "1_name": name,
+            "2_week": str(week),
+            "3_focus": focus,
+        },
     }
 
 
@@ -947,6 +1101,18 @@ async def dispatch(
                     f"recap ack nudge dispatch requires db (event {event.id})"
                 )
             message = await _build_recap_ack_nudge(db, event)
+        elif event.event_type in _PREGNANCY_MILESTONE_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"pregnancy milestone dispatch requires db (event {event.id})"
+                )
+            message = await _build_pregnancy_milestone_reminder(db, event)
+        elif event.event_type in _PREGNANCY_WEEKLY_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"pregnancy weekly dispatch requires db (event {event.id})"
+                )
+            message = await _build_pregnancy_weekly_reminder(db, event)
         else:
             message = _build_message_out(event)
     except ReminderNotApplicable as exc:

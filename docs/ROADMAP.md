@@ -60,13 +60,18 @@ MVP item "text + **voice notes**". No inbound audio path before this.
       clinical triage, and message_log all see the transcript)
 - **SoT ref:** MVP #1, §3A (voice glucose), §3C (voice trigger diary)
 
-### P4 — 🟡 Pregnancy timeline engine  · _task #10_
-Triage-aware today (`pregnancy_checklist` intent + red-flag routing) but **no
-trimester timeline, no milestone scheduler**, and `pregnancy_weekly_v1`
-template is defined yet never sent.
-- [ ] LMP/due-date field + gestational-week computation
-- [ ] Milestone materializer sweep (visits/labs/scans/supplements)
-- [ ] Wire `pregnancy_weekly_v1`
+### P4 — ✅ Pregnancy timeline engine  · _task #10 — DONE_
+Was triage-aware only (`pregnancy_checklist` intent + red-flag routing). Now a
+full timeline engine.
+- [x] LMP/due-date field + gestational-week computation (`pregnancies` table +
+      pure math module: EDD/Naegele, gestational age, trimester)
+- [x] Milestone materializer sweep (visits/labs/scans/supplements + weekly
+      check-ins) — rides the dose-materialize loop, idempotent like labs
+- [x] Wire `pregnancy_weekly_v1` (created the template + dispatcher branches)
+- [x] Intake/management endpoints (`POST/GET/end` pregnancy) with eager
+      materialize
+- _Future: conversational NL intake ("pregnant, LMP 15 Jan") + data-aware
+  `pregnancy_checklist` reply (current week + next milestone). Logged under #13._
 - **SoT ref:** §3F, V1 deliverable "Pregnancy timeline pack", Epic 6
 
 ### P5 — 🔴 Asthma cohort pack + first-class cohort flags  · _task #11_
@@ -119,6 +124,27 @@ template exists with no flow.
 ---
 
 ## Progress log
+- 2026-05-23 — **P4 pregnancy timeline engine: DONE.** New `pregnancies` table
+  (migration 0038, partial unique index = one active pregnancy per patient) +
+  `Pregnancy`/`PregnancyStatus` model + repo. Pure math module
+  `services/orchestrator/pregnancy.py` (EDD via Naegele's 280-day rule,
+  gestational age, trimester, a 17-entry ANC milestone schedule, weekly
+  check-in + focus copy) — fully unit-tested. Milestone materializer
+  `services/scheduler/pregnancy_milestones.py` walks active pregnancies and
+  enqueues `pregnancy_milestone_due` + `pregnancy_weekly_due` events
+  (future-only, idempotent dedupe by milestone-key/GA-week, rolling 2-week
+  weekly horizon); rides the existing dose-materialize loop. Dispatcher branches
+  + freshness windows + the new `pregnancy_weekly_v1` Meta template (3 params:
+  name/week/focus) — milestone + weekly sends share it, freeform in-CSW /
+  template out. Intake endpoints: `POST /patients/{id}/pregnancy` (resolve
+  LMP↔EDD, create, eager-materialize, return summary w/ current week +
+  trimester + next milestone), `GET …/pregnancy`, `POST …/pregnancy/{id}/end`
+  (cancels pending reminders). Tests: 14 unit (math + materializer scheduling/
+  dedup, whisper-free), 9 integration (endpoints + eager materialize + end-
+  cancel + dispatcher builders template/freeform/ReminderNotApplicable). 569
+  unit pass; pregnancy + scheduler integration green; ruff clean (new files),
+  no new lint on touched files. Migration applied to remote DB (0037→0038).
+  **Next: P5 asthma cohort + first-class cohort flags.**
 - 2026-05-23 — **P3 voice note transcription: DONE.** New
   `services/orchestrator/transcription.py` — parses the ingress `[voice-note]
   public_path=… mime=…` marker (mirrors the prescription-image path),

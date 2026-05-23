@@ -1,0 +1,20 @@
+{
+  "name": "pregnancy_weekly_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi {{1}}, this is your care team. You're in week {{2}} of your pregnancy. {{3}} Reply HELP anytime to reach us.",
+      "example": {
+        "body_text": [
+          [
+            "Asha",
+            "20",
+            "Your detailed anomaly scan (TIFFA) is due around now."
+          ]
+        ]
+      }
+    }
+  ]
+}

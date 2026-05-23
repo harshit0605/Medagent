@@ -182,6 +182,7 @@ class Patient(TimestampMixin, Base):
     adherence_events: Mapped[list[AdherenceEvent]] = relationship(back_populates="patient")
     alerts: Mapped[list[Alert]] = relationship(back_populates="patient")
     orders: Mapped[list[Order]] = relationship(back_populates="patient")
+    pregnancies: Mapped[list[Pregnancy]] = relationship(back_populates="patient")
 
 
 class Caregiver(TimestampMixin, Base):
@@ -1571,3 +1572,49 @@ class ScheduledEvent(Base):
     last_failed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+
+
+class PregnancyStatus(enum.Enum):
+    """Lifecycle of a pregnancy episode. Stored as a plain String on the
+    row (see :class:`Pregnancy`) — these constants are the canonical values."""
+
+    active = "active"
+    ended = "ended"
+
+
+class Pregnancy(TimestampMixin, Base):
+    """A single pregnancy episode for a patient, anchored on the LMP.
+
+    The pregnancy timeline engine reads ``lmp_date`` (or derives it from
+    ``edd``) to compute gestational age and materialize trimester-appropriate
+    milestone reminders (ANC visits, labs, scans, supplements) plus a weekly
+    check-in. The milestone sweep walks ``status == 'active'`` rows.
+
+    Either ``lmp_date`` or ``edd`` must be set; the engine fills the missing
+    one via Naegele's rule (EDD = LMP + 280 days). ``status`` is a plain
+    String (not a PG enum) following the care_plan_goals convention; use the
+    :class:`PregnancyStatus` constants for the values.
+
+    A partial unique index (migration 20260510_0038) enforces at most one
+    ``active`` row per patient while keeping historical ``ended`` rows.
+    """
+
+    __tablename__ = "pregnancies"
+    __table_args__ = (
+        Index("ix_pregnancies_patient_status", "patient_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[int] = mapped_column(
+        ForeignKey("patients.id", ondelete="CASCADE"), nullable=False
+    )
+    lmp_date: Mapped[date | None] = mapped_column(Date)
+    edd: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=PregnancyStatus.active.value
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ended_reason: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    patient: Mapped[Patient] = relationship(back_populates="pregnancies")
