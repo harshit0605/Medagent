@@ -122,6 +122,7 @@ Now activated end-to-end.
 | 🟡 Refill/delivery coordination (senior) | reminders only, no logistics | SoT §3E |
 | 🔴 Post-op completion checklist + wound-photo→queue | side-effect triage only | SoT §3D |
 | ✅ Patient-facing receipts | DONE — order delivery receipt (`order_receipt_v1`) on status→delivered | MVP #7 |
+| ✅ Proactive weekly-trend push (from P2) | DONE — opt-in sweep + `weekly_trend_v1`, deduped per 7d | `weekly_trend_sweep.py` |
 
 ---
 

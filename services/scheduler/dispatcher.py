@@ -58,6 +58,7 @@ _SUBSTITUTION_EVENT_TYPES: frozenset[str] = frozenset(
     {"order_substitution_request"}
 )
 _ORDER_RECEIPT_EVENT_TYPES: frozenset[str] = frozenset({"order_receipt"})
+_WEEKLY_TREND_EVENT_TYPES: frozenset[str] = frozenset({"weekly_trend_push"})
 
 # How late a reminder can be before we drop it as stale. T-1h has a much
 # tighter window — a "1 hour before" reminder that arrives 45 minutes after
@@ -85,6 +86,8 @@ _FRESHNESS_BY_EVENT: dict[str, timedelta] = {
     "order_substitution_request": timedelta(hours=48),
     # A delivery receipt is informational — still worth sending if delayed.
     "order_receipt": timedelta(hours=72),
+    # A weekly trend nudge is only meaningful within its week.
+    "weekly_trend_push": timedelta(hours=36),
 }
 
 # Approved Meta template name for outside-CSW APPOINTMENT reminders.
@@ -136,6 +139,11 @@ _SUBSTITUTION_TEMPLATE_NAME = os.getenv(
 # params (medication label, order reference).
 _ORDER_RECEIPT_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_ORDER_RECEIPT_TEMPLATE_NAME", "order_receipt_v1"
+)
+# Approved Meta template for outside-CSW weekly trend pushes. 1 body param
+# (the multi-line per-metric summary).
+_WEEKLY_TREND_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_WEEKLY_TREND_TEMPLATE_NAME", "weekly_trend_v1"
 )
 # Test override: set WHATSAPP_FORCE_REMINDER_TEMPLATE=1 to always use the
 # template path (handy for verifying the outside-CSW route while the patient
@@ -797,6 +805,45 @@ async def _build_order_receipt(
     }
 
 
+async def _build_weekly_trend(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Render the weekly self-report trend summary.
+
+    In-CSW: freeform text. Out-of-CSW: ``weekly_trend_v1`` template (single
+    body param = the multi-line per-metric summary)."""
+    payload = dict(event.payload or {})
+    summary = payload.get("summary") or []
+    if not summary:
+        raise ReminderNotApplicable("weekly trend has no metrics")
+    lines = [
+        f"• {m.get('label')}: {m.get('count')} reading(s), latest "
+        f"{m.get('latest')} {m.get('unit', '')}".rstrip()
+        for m in summary
+    ]
+    detail = "\n".join(lines)
+    body = (
+        "Your week in numbers:\n"
+        f"{detail}\n\n"
+        "Keep it up — reply with any new readings, or HELP for support."
+    )
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+        }
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _WEEKLY_TREND_TEMPLATE_NAME,
+        "template_params": {"1_summary": detail},
+    }
+
+
 async def _patient_in_csw(db: AsyncSession, patient_phone: str) -> bool:
     """True if the patient has messaged us within the WhatsApp 24h CSW.
 
@@ -1278,6 +1325,12 @@ async def dispatch(
                     f"order receipt dispatch requires db (event {event.id})"
                 )
             message = await _build_order_receipt(db, event)
+        elif event.event_type in _WEEKLY_TREND_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"weekly trend dispatch requires db (event {event.id})"
+                )
+            message = await _build_weekly_trend(db, event)
         else:
             message = _build_message_out(event)
     except ReminderNotApplicable as exc:

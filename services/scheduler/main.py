@@ -31,6 +31,7 @@ from services.scheduler import (
     refill_reminders,
     service_health_reconciler,
     sla_breach_sweep,
+    weekly_trend_sweep,
 )
 from services.scheduler.dispatcher import dispatch
 
@@ -170,6 +171,22 @@ def _goal_drift_sweep_seconds() -> float:
         )
     except ValueError:
         return 21600.0
+
+
+def _weekly_trend_push_enabled() -> bool:
+    """Proactive weekly-trend pushes are opt-in (an extra outbound). Off by
+    default; enable per-deployment with ``WEEKLY_TREND_PUSH_ENABLED=1``."""
+    return os.getenv("WEEKLY_TREND_PUSH_ENABLED", "0") == "1"
+
+
+def _weekly_trend_sweep_seconds() -> float:
+    """How often the weekly-trend sweep runs. Daily default — the sweep
+    dedupes to once per 7-day window per patient, so a daily cadence just
+    catches each patient's window boundary promptly."""
+    try:
+        return float(os.getenv("WEEKLY_TREND_SWEEP_SECONDS", "86400"))
+    except ValueError:
+        return 86400.0
 
 
 def _calendar_sync_sweep_seconds() -> float:
@@ -312,6 +329,16 @@ async def _run_goal_drift_sweep_once() -> dict[str, Any]:
     SessionLocal = get_sessionmaker()
     async with SessionLocal() as db:
         out = await goal_drift_sweep.sweep_goal_drift(db)
+        await db.commit()
+    return out
+
+
+async def _run_weekly_trend_sweep_once() -> dict[str, Any]:
+    """One pass: enqueue a weekly self-report trend push for each patient
+    with recent readings (deduped to once per 7-day window)."""
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        out = await weekly_trend_sweep.sweep_weekly_trends(db)
         await db.commit()
     return out
 
@@ -542,6 +569,32 @@ async def _goal_drift_sweep_loop(
         except asyncio.TimeoutError:
             pass
     log.info("goal-drift sweep loop stopped")
+
+
+async def _weekly_trend_sweep_loop(
+    stop_event: asyncio.Event, interval: float
+) -> None:
+    log.info(
+        "weekly-trend sweep loop started (interval=%ss)", interval
+    )
+    while not stop_event.is_set():
+        try:
+            result = await _run_weekly_trend_sweep_once()
+            await _record_heartbeat(
+                "scheduler.weekly_trend_sweep",
+                outcome="ok",
+                details=_heartbeat_details_safe(result),
+            )
+        except Exception:  # noqa: BLE001 — keep loop alive
+            log.exception("weekly-trend sweep raised; continuing")
+            await _record_heartbeat(
+                "scheduler.weekly_trend_sweep", outcome="error"
+            )
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            pass
+    log.info("weekly-trend sweep loop stopped")
 
 
 async def _clinical_alert_repage_sweep_loop(
@@ -811,6 +864,7 @@ async def lifespan(app: FastAPI):
     calendar_sync_task: asyncio.Task[None] | None = None
     clinical_alert_repage_task: asyncio.Task[None] | None = None
     goal_drift_task: asyncio.Task[None] | None = None
+    weekly_trend_task: asyncio.Task[None] | None = None
     if _scheduler_enabled() and os.getenv("DATABASE_URL"):
         dispatch_task = asyncio.create_task(
             _polling_loop(stop_event, _poll_seconds())
@@ -870,6 +924,13 @@ async def lifespan(app: FastAPI):
                 _goal_drift_sweep_seconds(),
             )
         )
+        if _weekly_trend_push_enabled():
+            weekly_trend_task = asyncio.create_task(
+                _weekly_trend_sweep_loop(
+                    stop_event,
+                    _weekly_trend_sweep_seconds(),
+                )
+            )
     else:
         log.info("scheduler loops disabled (SCHEDULER_ENABLED=%s)", os.getenv("SCHEDULER_ENABLED"))
     app.state.scheduler_stop = stop_event
@@ -886,6 +947,7 @@ async def lifespan(app: FastAPI):
     app.state.calendar_sync_task = calendar_sync_task
     app.state.clinical_alert_repage_task = clinical_alert_repage_task
     app.state.goal_drift_task = goal_drift_task
+    app.state.weekly_trend_task = weekly_trend_task
     try:
         yield
     finally:
@@ -904,6 +966,7 @@ async def lifespan(app: FastAPI):
             calendar_sync_task,
             clinical_alert_repage_task,
             goal_drift_task,
+            weekly_trend_task,
         ):
             if t is None:
                 continue

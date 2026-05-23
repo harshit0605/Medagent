@@ -1,0 +1,18 @@
+{
+  "name": "weekly_trend_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Your week in numbers:\n{{1}}\n\nKeep it up — reply with any new readings, or HELP for support.",
+      "example": {
+        "body_text": [
+          [
+            "• Blood glucose: 3 reading(s), latest 140 mg/dL\n• Weight: 1 reading(s), latest 72 kg"
+          ]
+        ]
+      }
+    }
+  ]
+}
