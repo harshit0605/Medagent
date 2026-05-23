@@ -6429,6 +6429,63 @@ async def end_post_op_episode(
     return dto
 
 
+# ---- Google Calendar webhook push (task #13) --------------------------------
+
+
+@app.post("/webhooks/google-calendar")
+async def google_calendar_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Receive a Google Calendar push notification and sync that doctor's
+    calendar immediately (push), instead of waiting for the polling sweep.
+
+    Google sends headers — ``X-Goog-Resource-State`` (``sync`` for the initial
+    handshake, ``exists`` for a change), ``X-Goog-Channel-Token`` (we set this
+    to the doctor_id when registering the watch), ``X-Goog-Channel-ID``. We ACK
+    fast (always 200, even on error) so Google doesn't enter aggressive retry;
+    the polling sweep remains the backstop. Registering the watch channel
+    itself is an ops/setup step (calls Google's events.watch with the doctor_id
+    as the token)."""
+    state = request.headers.get("X-Goog-Resource-State", "")
+    token = request.headers.get("X-Goog-Channel-Token")
+    channel_id = request.headers.get("X-Goog-Channel-ID")
+
+    # Initial validation ping when the watch is created — just acknowledge.
+    if state == "sync":
+        return {"status": "ok", "handshake": True}
+
+    if not (token and token.isdigit()):
+        log.info(
+            "calendar webhook: missing/invalid doctor token "
+            "(channel=%s, state=%s)",
+            channel_id,
+            state,
+        )
+        return {"status": "ok", "synced": False, "reason": "no_doctor_token"}
+
+    from services.scheduler import calendar_sync_sweep
+
+    doctor_id = int(token)
+    try:
+        result = await calendar_sync_sweep.reconcile_doctor(
+            db, doctor_id=doctor_id
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001 — never make Google retry on our error
+        log.exception(
+            "calendar webhook sync failed for doctor %s", doctor_id
+        )
+        return {"status": "ok", "synced": False, "reason": "sync_error"}
+
+    return {
+        "status": "ok",
+        "synced": True,
+        "doctor_id": doctor_id,
+        "changes": result.get("changes_received", 0),
+    }
+
+
 # ---- Visit brief endpoints --------------------------------------------------
 
 

@@ -56,6 +56,15 @@ def _ensure_utc(value: datetime) -> datetime:
     return value
 
 
+async def reconcile_doctor(
+    session: AsyncSession, *, doctor_id: int
+) -> dict[str, int]:
+    """Public entry to incrementally sync ONE doctor's calendar + reconcile.
+    Used by the Google Calendar webhook push (push-triggered sync) so a change
+    is applied immediately instead of waiting for the next polling tick."""
+    return await _reconcile_doctor(session, doctor_id=doctor_id)
+
+
 async def _reconcile_doctor(
     session: AsyncSession, *, doctor_id: int
 ) -> dict[str, int]:

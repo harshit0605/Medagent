@@ -116,7 +116,7 @@ Now activated end-to-end.
 |---|---|---|
 | ✅ Goal auto-achievement (N consecutive on-target) | DONE — drift sweep flips active→achieved + resolves drift ticket | `goal_drift_sweep.py` |
 | ✅ Clinical-alert on-call rota + multi-doctor escalation | DONE — re-pages escalate round-robin through the on-call rota, excluding the last-paged doctor | `clinical_alert_pager.py` |
-| 🟡 Calendar sync via webhook push | polling only | `calendar_sync_sweep.py:34` |
+| ✅ Calendar sync via webhook push | DONE — `POST /webhooks/google-calendar` push-triggers a per-doctor sync (polling remains backstop) | `main.py` + `calendar_sync_sweep.reconcile_doctor` |
 | ✅ Broadcast cohort-tag / composite filters | DONE — all_of/any_of composite + cohort_tag_id, 6 cohorts | `broadcast_service.py` |
 | 🔴 Multi-patient households | caregivers exist; no 1→many model | SoT V1 |
 | 🟡 Refill/delivery coordination (senior) | reminders only, no logistics | SoT §3E |
