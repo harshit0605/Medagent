@@ -332,6 +332,43 @@ async def run_agent_workflow(
     normalized_last = _normalize_last_user_message(last_user_message_at)
     inbound_text = (text or "").strip()
 
+    # Vitals self-report short-circuit — sync-fallback parity with the
+    # graph router's vitals_handler. Safety first: if the message also
+    # reads as a side-effect/symptom report, skip logging here and let the
+    # normal triage path (with escalation) handle it.
+    if inbound_text:
+        from services.orchestrator.side_effect_handler import (
+            looks_like_side_effect_report,
+        )
+        from services.orchestrator.vitals_handler import (
+            handle_vitals_log,
+            looks_like_vitals_log,
+        )
+
+        if looks_like_vitals_log(inbound_text) and not looks_like_side_effect_report(
+            inbound_text
+        ):
+            delta = await handle_vitals_log(
+                patient_phone=patient_id, new_user_text=inbound_text
+            )
+            if delta is not None:
+                return WorkflowResult(
+                    intent="adherence_update",
+                    risk_level="low",
+                    use_template=False,
+                    policy_reason="vitals_self_report",
+                    policy_reason_codes=("vitals_self_report",),
+                    flow_action="ALLOW",
+                    escalation_required=False,
+                    escalation_reason=None,
+                    response_body=delta["response_body"],
+                    template_name=None,
+                    quick_replies=["CALL", "HELP"],
+                    audit_reasons=delta.get(
+                        "audit_reasons", ["vitals_self_report"]
+                    ),
+                )
+
     intent = await _detect_intent(inbound_text)
     decision = await _evaluate_policy_decision(
         patient_id=patient_id,
@@ -647,6 +684,27 @@ async def _lookup_handler_node(state: AgentState) -> dict[str, Any]:
     return delta
 
 
+async def _vitals_handler_node(state: AgentState) -> dict[str, Any]:
+    """Patient self-reported vitals ("sugar 140", "BP 130/85"). Parse +
+    persist a metric_observation, link to a matching active goal, reply
+    with an ack + on/off-target context. Skips intent / safety / LLM."""
+    from services.orchestrator.vitals_handler import handle_vitals_log
+
+    delta = await handle_vitals_log(
+        patient_phone=state.get("patient_id", ""),
+        new_user_text=state.get("text", ""),
+    )
+    if delta is None:
+        # Router matched but the patient row is missing or nothing
+        # persisted — fall through with a benign audit note.
+        return {"audit_reasons": ["vitals_no_patient"]}
+    delta.setdefault(
+        "messages", [{"role": "assistant", "content": delta["response_body"]}]
+    )
+    delta.setdefault("flow_action", "ALLOW")
+    return delta
+
+
 async def _optout_handler_node(state: AgentState) -> dict[str, Any]:
     """STOP / START keyword inbound. Routes to handle_optout when the
     inbound looks like opt-out, handle_optin otherwise (the router
@@ -740,6 +798,7 @@ def _route_for_onboarding(
     from services.orchestrator.side_effect_handler import (
         looks_like_side_effect_report,
     )
+    from services.orchestrator.vitals_handler import looks_like_vitals_log
 
     text = state.get("text", "")
 
@@ -774,6 +833,12 @@ def _route_for_onboarding(
     # second. Patient-safety wins.
     if looks_like_side_effect_report(text):
         return "side_effect_handler"
+    # Vitals self-report ("sugar 140", "BP 130/85") AFTER side-effect so a
+    # message that's both a reading and a symptom ("sugar 400 and dizzy")
+    # routes to clinical triage first. The parser is range-gated so stray
+    # numbers don't register.
+    if looks_like_vitals_log(text):
+        return "vitals_handler"
     # Self-service lookup queries — strict-anchored classifier so
     # generic mentions of meds/labs ("I forgot to take my meds")
     # don't accidentally route here. Misses fall through to the LLM.
@@ -951,6 +1016,7 @@ def build_langgraph_workflow(
     graph.add_node("lab_handler", _lab_handler_node)
     graph.add_node("recap_handler", _recap_handler_node)
     graph.add_node("caregiver_handler", _caregiver_handler_node)
+    graph.add_node("vitals_handler", _vitals_handler_node)
     graph.add_node("detect_intent", _detect_intent_node)
     graph.add_node("policy", _policy_node)
     graph.add_node("safety", _safety_node)
@@ -976,6 +1042,7 @@ def build_langgraph_workflow(
             "recap_handler": "recap_handler",
             "caregiver_handler": "caregiver_handler",
             "side_effect_handler": "side_effect_handler",
+            "vitals_handler": "vitals_handler",
             "lookup_handler": "lookup_handler",
             "detect_intent": "detect_intent",
         },
@@ -1003,6 +1070,7 @@ def build_langgraph_workflow(
     graph.add_edge("lab_handler", END)
     graph.add_edge("recap_handler", END)
     graph.add_edge("caregiver_handler", END)
+    graph.add_edge("vitals_handler", END)
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer)

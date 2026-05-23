@@ -42,7 +42,7 @@ reminders never dispatch**. Hidden behind a skipped test
 - [ ] Unskip the test
 - **SoT ref:** MVP #4 (refill forecasting), Epic 4
 
-### P2 — 🟡 Patient vitals self-report inbound flow  · _task #8_
+### P2 — ✅ Patient vitals self-report inbound flow  · _task #8 — DONE_
 The SoT's daily-retention engine. Patients text `"sugar 140"` / `"BP 130/85"`
 and get weekly trends. Storage exists (slice 14 `metric_observations` with a
 `patient_self_report` source value) but **no inbound flow writes it** — the
@@ -118,6 +118,18 @@ template exists with no flow.
 ---
 
 ## Progress log
+- 2026-05-10 — **P2 vitals self-report: DONE.** New
+  `services/orchestrator/vitals_handler.py` — regex parser for glucose / BP
+  (→2 readings) / weight / HbA1c / peak-flow with plausibility ranges;
+  persists `metric_observation` (source=patient_self_report), links to a
+  matching active `care_plan_goal`, replies with ack + on/off-target + a
+  light weekly count. Wired into the agent graph (new `vitals_handler` node +
+  router rank AFTER side-effect for safety) AND the sync-fallback runner
+  (defers to triage when the message also reads as a symptom). Tests: 9 unit
+  (parser) + 7 integration (persistence, goal-link, BP-pair, /route e2e,
+  safety deferral). 548 unit pass, ruff clean. _Note: inline weekly count
+  shipped; a proactive scheduled weekly-trend push is a future add (logged
+  under task #13)._
 - 2026-05-10 — Doc created from vision audit. Starting P1 (refill contract bug).
 - 2026-05-10 — **P1 refill contract bug: code-complete.** `RefillDueRequest`
   now carries `regimen_id` + `dose`; `/emit-refill-due` builds a
