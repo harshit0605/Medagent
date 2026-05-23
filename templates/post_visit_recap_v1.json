@@ -1,0 +1,18 @@
+{
+  "name": "post_visit_recap_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi {{1}}, your care team has prepared an after-visit recap with notes about your medications and next steps from your recent appointment. Reply OK to confirm you've received it, or QUESTION if anything is unclear.",
+      "example": {
+        "body_text": [
+          [
+            "Sam"
+          ]
+        ]
+      }
+    }
+  ]
+}

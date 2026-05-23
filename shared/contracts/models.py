@@ -49,6 +49,13 @@ class MessageIn(BaseModel):
     audio_url: HttpUrl | None = None
     audio_duration_seconds: int | None = Field(default=None, ge=0)
 
+    # How the patient sent the inbound. ``content_type`` describes the
+    # raw wire format (TEXT / AUDIO etc.); ``input_kind`` describes
+    # what the orchestrator is processing — set to ``voice`` when the
+    # webhook has already transcribed an audio note into ``text``, so
+    # the inbox row can show a voice badge. Optional; defaults to text.
+    input_kind: Literal["text", "voice", "image", "button"] | None = None
+
     intent: Intent | IntentType | str = Intent.UNKNOWN
     timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     received_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
@@ -79,6 +86,19 @@ class ActionButton(BaseModel):
     action: str
 
 
+class ListRow(BaseModel):
+    """One tappable row in a WhatsApp interactive list message.
+
+    Meta limits: id ≤ 200 chars, title ≤ 24 chars, description ≤ 72 chars.
+    The gateway truncates defensively before sending so a too-long title
+    doesn't fail the whole batch.
+    """
+
+    id: str
+    title: str
+    description: str | None = None
+
+
 class Destination(BaseModel):
     channel_type: ChannelType
     recipient_address: str
@@ -103,6 +123,17 @@ class MessageOut(BaseModel):
     template_params: dict[str, str | int | float | bool] = Field(default_factory=dict)
     quick_replies: list[QuickReply] = Field(default_factory=list)
     buttons: list[ActionButton] = Field(default_factory=list)
+
+    # Interactive list message rows (max 10). When `list_rows` is non-empty
+    # the gateway sends an interactive list (richer than reply buttons; up
+    # to 10 tappable rows). `list_rows` and `buttons` are mutually exclusive
+    # at the protocol level — if both present the gateway prefers list.
+    list_rows: list[ListRow] = Field(default_factory=list)
+    # Up to 20 chars — the trigger button shown that opens the list panel.
+    # Defaults to "Select" in the gateway when omitted.
+    list_button_label: str | None = None
+    # Up to 24 chars — section header above the rows. Defaults to "Options".
+    list_section_title: str | None = None
     correlation_id: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
 

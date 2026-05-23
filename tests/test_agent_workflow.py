@@ -3,9 +3,9 @@ from datetime import datetime, timedelta, timezone
 from services.orchestrator.agent_workflow import run_agent_workflow
 
 
-def test_workflow_outside_csw_requires_template_and_audit_reason():
+async def test_workflow_outside_csw_requires_template_and_audit_reason():
     now = datetime(2026, 2, 20, 10, 0, tzinfo=timezone.utc)
-    result = run_agent_workflow(
+    result = await run_agent_workflow(
         message_id="m1",
         patient_id="p1",
         text="Need refill, I might run out",
@@ -17,12 +17,13 @@ def test_workflow_outside_csw_requires_template_and_audit_reason():
     assert result.intent == "refill_request"
     assert result.use_template is True
     assert result.template_name == "escalate_call_v1"
-    assert "template_required" in result.audit_reasons
+    assert "TEMPLATE_REQUIRED_OUTSIDE_WINDOW" in result.audit_reasons
+    assert result.flow_action == "ALLOW"
 
 
-def test_workflow_triages_critical_symptom_to_escalation():
+async def test_workflow_triages_critical_symptom_to_escalation():
     now = datetime(2026, 2, 20, 10, 0, tzinfo=timezone.utc)
-    result = run_agent_workflow(
+    result = await run_agent_workflow(
         message_id="m2",
         patient_id="p2",
         text="I have chest pain and cannot breathe",
@@ -38,9 +39,9 @@ def test_workflow_triages_critical_symptom_to_escalation():
     assert "CALL now" in result.response_body
 
 
-def test_workflow_detects_followup_closure_intent():
+async def test_workflow_detects_followup_closure_intent():
     now = datetime(2026, 2, 20, 10, 0, tzinfo=timezone.utc)
-    result = run_agent_workflow(
+    result = await run_agent_workflow(
         message_id="m3",
         patient_id="p3",
         text="Lab booked",

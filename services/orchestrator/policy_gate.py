@@ -40,17 +40,24 @@ class PolicyDecision:
 
 
 class PatientStateStore:
-    """In-memory store abstraction for last inbound timestamps."""
+    """In-memory store for last inbound timestamps.
+
+    Methods are ``async`` so the same interface fits both the in-memory variant
+    used by tests and the Postgres-backed adapter in
+    :mod:`services.orchestrator.db_policy_gate` that awaits real I/O.
+    """
 
     def __init__(self) -> None:
         self._last_inbound: Dict[str, datetime] = {}
 
-    def set_last_inbound_timestamp(self, patient_id: str, inbound_timestamp: datetime) -> None:
+    async def set_last_inbound_timestamp(
+        self, patient_id: str, inbound_timestamp: datetime
+    ) -> None:
         if inbound_timestamp.tzinfo is None:
             inbound_timestamp = inbound_timestamp.replace(tzinfo=timezone.utc)
         self._last_inbound[patient_id] = inbound_timestamp.astimezone(timezone.utc)
 
-    def get_last_inbound_timestamp(self, patient_id: str) -> Optional[datetime]:
+    async def get_last_inbound_timestamp(self, patient_id: str) -> Optional[datetime]:
         return self._last_inbound.get(patient_id)
 
 
@@ -58,7 +65,7 @@ class AuditTrail:
     def __init__(self) -> None:
         self.records: List[Dict[str, object]] = []
 
-    def log_policy_decision(self, decision: PolicyDecision) -> None:
+    async def log_policy_decision(self, decision: PolicyDecision) -> None:
         if decision.flow_action not in ALLOWED_FLOW_ACTIONS:
             raise ValueError(f"Invalid flow action: {decision.flow_action}")
         if decision.outbound_mode not in ALLOWED_OUTBOUND_MODES:
@@ -84,7 +91,7 @@ class PolicyGate:
         self.state_store = state_store
         self.audit_trail = audit_trail
 
-    def evaluate(
+    async def evaluate(
         self,
         patient_id: str,
         intent: str,
@@ -103,7 +110,7 @@ class PolicyGate:
             "requested_flow": requested_flow,
         }
 
-        last_inbound = self.state_store.get_last_inbound_timestamp(patient_id)
+        last_inbound = await self.state_store.get_last_inbound_timestamp(patient_id)
         allow_freeform = False
 
         if last_inbound is None:
@@ -132,7 +139,6 @@ class PolicyGate:
             reason_codes.append(ReasonCode.REGULATED_CONTENT_REROUTED)
 
         reason_codes.append(ReasonCode.HUMAN_ESCALATION_EXPOSED)
-
         reason_codes = list(dict.fromkeys(reason_codes))
 
         decision = PolicyDecision(
@@ -144,5 +150,5 @@ class PolicyGate:
             reason_codes=reason_codes,
             details=details,
         )
-        self.audit_trail.log_policy_decision(decision)
+        await self.audit_trail.log_policy_decision(decision)
         return decision

@@ -1,0 +1,32 @@
+{
+  "name": "caregiver_consent_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi {{1}}, {{2}} has added you as a care contact in their care program. If you confirm, you'll receive copies of post-visit recaps for {{2}}. Tap a button below to confirm or decline.",
+      "example": {
+        "body_text": [
+          [
+            "Anita",
+            "Harshit Karnatak"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        {
+          "type": "QUICK_REPLY",
+          "text": "Yes, I consent"
+        },
+        {
+          "type": "QUICK_REPLY",
+          "text": "No, decline"
+        }
+      ]
+    }
+  ]
+}

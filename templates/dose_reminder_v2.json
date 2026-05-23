@@ -1,0 +1,31 @@
+{
+  "name": "dose_reminder_v2",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi from your care team. This is a friendly reminder that it's time to take your {{1}}. Please tap one of the buttons below to log this dose.",
+      "example": {
+        "body_text": [
+          [
+            "Metformin (500 mg)"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        {
+          "type": "QUICK_REPLY",
+          "text": "Taken"
+        },
+        {
+          "type": "QUICK_REPLY",
+          "text": "Skipped"
+        }
+      ]
+    }
+  ]
+}

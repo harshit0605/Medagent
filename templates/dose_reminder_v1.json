@@ -1,0 +1,18 @@
+{
+  "name": "dose_reminder_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi from your care team. This is a friendly reminder that it's time to take your {{1}}. Please confirm by replying TAKEN, or reply SKIP if you decided not to take this dose.",
+      "example": {
+        "body_text": [
+          [
+            "Metformin (500 mg)"
+          ]
+        ]
+      }
+    }
+  ]
+}

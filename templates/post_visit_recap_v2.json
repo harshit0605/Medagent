@@ -1,0 +1,31 @@
+{
+  "name": "post_visit_recap_v2",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi {{1}}, your care team has prepared an after-visit recap with notes about your medications and next steps from your recent appointment. Please tap one of the buttons below.",
+      "example": {
+        "body_text": [
+          [
+            "Sam"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        {
+          "type": "QUICK_REPLY",
+          "text": "Got it"
+        },
+        {
+          "type": "QUICK_REPLY",
+          "text": "I have a question"
+        }
+      ]
+    }
+  ]
+}

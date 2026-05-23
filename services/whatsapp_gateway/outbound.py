@@ -41,7 +41,7 @@ class WhatsAppGateway:
         self.template_api = template_api
         self.audit_trail = audit_trail
 
-    def send_outbound(
+    async def send_outbound(
         self,
         patient_id: str,
         text: str,
@@ -53,7 +53,9 @@ class WhatsAppGateway:
 
         if policy_decision.outbound_mode == "FREEFORM":
             result = self.freeform_api.send(patient_id=patient_id, text=text)
-            self._log_gateway_decision(patient_id, result.mode, policy_decision.reason_codes)
+            await self._log_gateway_decision(
+                patient_id, result.mode, policy_decision.reason_codes
+            )
             return result
 
         template_variables = {**template_variables, "body": text}
@@ -63,13 +65,20 @@ class WhatsAppGateway:
             variables=template_variables,
         )
         reason_codes = list(policy_decision.reason_codes)
-        if ReasonCode.TEMPLATE_REQUIRED_OUTSIDE_WINDOW not in reason_codes and ReasonCode.TEMPLATE_REQUIRED_NO_INBOUND_FOUND not in reason_codes:
+        if (
+            ReasonCode.TEMPLATE_REQUIRED_OUTSIDE_WINDOW not in reason_codes
+            and ReasonCode.TEMPLATE_REQUIRED_NO_INBOUND_FOUND not in reason_codes
+        ):
             reason_codes.append(ReasonCode.TEMPLATE_REQUIRED_OUTSIDE_WINDOW)
 
-        self._log_gateway_decision(patient_id, result.mode, reason_codes)
+        await self._log_gateway_decision(patient_id, result.mode, reason_codes)
         return result
 
-    def _log_gateway_decision(self, patient_id: str, mode: str, reason_codes: List[str]) -> None:
+    async def _log_gateway_decision(
+        self, patient_id: str, mode: str, reason_codes: List[str]
+    ) -> None:
+        # AuditTrail.records is the in-memory list; in production use the
+        # DbAuditTrail subclass which awaits real I/O via log_policy_decision.
         self.audit_trail.records.append(
             {
                 "type": "whatsapp_outbound_policy",

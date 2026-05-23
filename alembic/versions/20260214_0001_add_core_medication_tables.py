@@ -199,7 +199,16 @@ def upgrade() -> None:
         sa.column("language", sa.String),
         sa.column("body", sa.Text),
         sa.column("variables", sa.JSON),
-        sa.column("category", sa.String),
+        sa.column(
+            "category",
+            sa.Enum(
+                "utility",
+                "marketing",
+                "transactional",
+                name="template_category",
+                create_type=False,
+            ),
+        ),
     )
 
     op.bulk_insert(

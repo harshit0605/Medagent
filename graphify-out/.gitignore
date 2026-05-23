@@ -1,0 +1,10 @@
+# Regenerable graphify artifacts — keep the knowledge base (graph.json,
+# graph.html, GRAPH_REPORT.md, manifest.json, analysis) in version control
+# so teammates get the graph without rebuilding, but exclude the heavy
+# regenerable bits: the per-file extraction cache and the timestamped
+# semantic-graph backups cluster-only writes on each re-run.
+cache/
+20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+cost.json
+.graphify_uncached.txt
+.graphify_semantic_marker

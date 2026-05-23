@@ -1,0 +1,64 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ops_console (Next.js)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd apps/ops_console && bun run dev"],
+      "port": 31415,
+      "autoPort": false
+    },
+    {
+      "name": "whatsapp_gateway (FastAPI)",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "services.whatsapp_gateway.main:app",
+        "--port",
+        "31416",
+        "--reload",
+        "--log-level",
+        "info"
+      ],
+      "port": 31416
+    },
+    {
+      "name": "orchestrator (FastAPI)",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "services.orchestrator.main:app",
+        "--port",
+        "31417",
+        "--reload",
+        "--log-level",
+        "info"
+      ],
+      "port": 31417
+    },
+    {
+      "name": "scheduler (FastAPI)",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "services.scheduler.main:app",
+        "--port",
+        "31418",
+        "--reload",
+        "--log-level",
+        "info"
+      ],
+      "port": 31418
+    },
+    {
+      "name": "cloudflared tunnel",
+      "runtimeExecutable": "cloudflared",
+      "runtimeArgs": ["tunnel", "run", "medagent"],
+      "port": 20241,
+      "autoPort": false
+    }
+  ]
+}

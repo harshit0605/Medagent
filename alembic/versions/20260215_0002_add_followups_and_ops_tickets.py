@@ -50,7 +50,10 @@ def upgrade() -> None:
     op.create_table(
         "ops_tickets",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("patient_id", sa.Integer(), nullable=False),
+        # patient_id is a free-form runtime identifier (e.g. WhatsApp phone or
+        # external_id). No FK to patients until the runtime flow registers a
+        # Patient row for every inbound message.
+        sa.Column("patient_id", sa.String(length=128), nullable=False),
         sa.Column("category", sa.String(length=64), nullable=False),
         sa.Column("priority", sa.String(length=8), nullable=False),
         sa.Column("sla_minutes", sa.Integer(), nullable=False),
@@ -60,7 +63,6 @@ def upgrade() -> None:
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["patient_id"], ["patients.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
 

@@ -1,0 +1,26 @@
+{
+  "name": "appointment_reminder_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi from your care team. This is a friendly reminder that you have an upcoming appointment with {{1}}. Scheduled time: {{2}}. Please use the buttons below if you need to cancel or reschedule.",
+      "example": {
+        "body_text": [
+          [
+            "Dr Harshit (test)",
+            "tomorrow, Mon 04 May at 11:00 AM (Asia/Kolkata)"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        { "type": "QUICK_REPLY", "text": "Cancel appointment" },
+        { "type": "QUICK_REPLY", "text": "Reschedule" }
+      ]
+    }
+  ]
+}
