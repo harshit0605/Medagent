@@ -88,13 +88,24 @@ Asthma was entirely absent; cohorts were only `diabetes/cardiac/fall_risk`.
   (overlaps the refill/partner layer); logged under #13._
 - **SoT ref:** §3C, V1 "Asthma rescue/puff analytics", Epic 6
 
-### P6 — 🔴 Partner / refill execute layer  · _task #12_
-Biggest scope + monetization wedge. The `Order`/`OrderStatus` schema
-(`models.py:324`) is **dead — defined, never written**. `substitution_approval_v1`
-template exists with no flow.
-- [ ] Refill "reorder" action → create `Order`
-- [ ] Pharmacy partner adapter (deep-link/API, replaceable interface)
-- [ ] Substitution approval flow
+### P6 — ✅ Partner / refill execute layer  · _task #12 — DONE_
+The `Order`/`OrderStatus` schema was dead (defined in 0001, never written).
+Now activated end-to-end.
+- [x] Refill "reorder" action → create `Order` (regex `reorder` + handler
+      branch + opt-in "Reorder" button via `REFILL_REORDER_ENABLED`)
+- [x] Pharmacy partner adapter — replaceable `PharmacyAdapter` Protocol +
+      default `DeepLinkPharmacyAdapter` (env-configurable deep-link) +
+      `get_pharmacy_adapter` factory. No in-chat payments (§11) — we route to
+      the partner.
+- [x] Substitution approval flow — `propose-substitution` endpoint → enqueue
+      → dispatcher renders `substitution_approval_v1` (template created) →
+      patient Approve/Decline (`[order-action]` tap → `order_handler`, graph +
+      sync routes)
+- [x] Order management endpoints: create (adapter + dedupe), list, status
+      advance
+- _Migration 0040 drops the dead empty `orders` table + its `order_status` PG
+  enum and recreates it with the execute-layer schema (String status, regimen
+  link, med/dose snapshots, substitution columns)._
 - **SoT ref:** MVP #6, Epic 4, §2 Monetization. (No in-chat payments — §11.)
 
 ---
@@ -130,6 +141,33 @@ template exists with no flow.
 ---
 
 ## Progress log
+- 2026-05-23 — **P6 partner / refill execute layer: DONE.** Activated the dead
+  `Order` schema. Migration 0040 drops the empty 0001 `orders` table + its
+  `order_status` PG enum and recreates it with the execute-layer shape (String
+  status, `regimen_id` link, med/dose snapshots, partner deep-link, +
+  substitution columns). New `app/db/repositories/orders.py` (create/list/
+  get_open_for_regimen dedupe/set_status/propose+resolve_substitution, with
+  `await refresh` after mutating flushes to avoid the onupdate lazy-load
+  MissingGreenlet). New `services/orchestrator/pharmacy.py` — a replaceable
+  `PharmacyAdapter` Protocol + default `DeepLinkPharmacyAdapter`
+  (env-configurable deep-link, URL-encoded) + `get_pharmacy_adapter` factory
+  (no in-chat payments per §11; we route to the partner). Refill "reorder":
+  `_REFILL_ACTION_RE` now accepts `reorder`, a handler branch calls the adapter
+  + creates an Order (idempotent via get_open_for_regimen), and an opt-in
+  "Reorder" button (`REFILL_REORDER_ENABLED`) replaces Snooze on the reminder
+  (default off → legacy 3-button set + its test unchanged). Substitution loop:
+  `POST /orders/{id}/propose-substitution` records the proposal + enqueues an
+  `order_substitution_request`; the dispatcher renders it as the new
+  `substitution_approval_v1` template (out-of-CSW) / Approve-Decline buttons
+  (in-CSW); the patient's tap (`[order-action] sub_approve|sub_decline`) routes
+  to a new `order_handler` (graph node + sync-fallback short-circuit) which
+  resolves the substitution. Order endpoints: create (adapter + 409 dedupe),
+  list, status advance. Tests: 6 unit (adapter env variations, marker parsers)
+  + 10 integration (order CRUD, reorder→Order idempotent, substitution
+  propose→enqueue→approve/decline, dispatcher template/freeform, /route e2e).
+  583 unit pass; orders + scheduler + inbox integration green; ruff clean (new
+  files). Migration applied to remote DB (0039→0040). **Next: P7+ — half-
+  finished completions (#13) + test infra (#14).**
 - 2026-05-23 — **P5 asthma cohort + first-class cohort flags: DONE.** Migration
   0039 adds `cohort_asthma` / `cohort_post_op` / `cohort_pregnancy` booleans to
   patients (backfilling pregnancy from active episodes) + an

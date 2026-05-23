@@ -332,14 +332,54 @@ class Alert(TimestampMixin, Base):
 
 
 class Order(TimestampMixin, Base):
+    """A medication reorder routed to a fulfillment partner.
+
+    Created when a patient taps "Reorder" on a refill reminder (or ops/a
+    partner places one on their behalf). A replaceable pharmacy adapter
+    assigns ``partner`` + an optional ``partner_deeplink`` / ``partner_order_id``.
+    ``status`` walks the :class:`OrderStatus` values (stored as a plain String
+    following the recent convention). ``medication_name`` / ``dose`` are
+    snapshotted so the order stands on its own even if the regimen changes or
+    is deleted (regimen_id is SET NULL on delete).
+
+    The ``substitution_*`` columns back the ``substitution_approval_v1`` flow:
+    a partner proposes an alternative, we ask the patient to approve, and
+    record the outcome here.
+    """
+
     __tablename__ = "orders"
+    __table_args__ = (
+        Index("ix_orders_patient_status", "patient_id", "status"),
+        Index("ix_orders_regimen_status", "regimen_id", "status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
-    partner: Mapped[str] = mapped_column(String(128), nullable=False)
-    status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus, name="order_status"), nullable=False)
+    patient_id: Mapped[int] = mapped_column(
+        ForeignKey("patients.id", ondelete="CASCADE"), nullable=False
+    )
+    regimen_id: Mapped[int | None] = mapped_column(
+        ForeignKey("regimens.id", ondelete="SET NULL")
+    )
+    medication_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dose: Mapped[str | None] = mapped_column(String(128))
+    quantity: Mapped[str | None] = mapped_column(String(64))
+    partner: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="manual", server_default="manual"
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=OrderStatus.pending.value,
+        server_default="pending",
+    )
     partner_order_id: Mapped[str | None] = mapped_column(String(128))
+    partner_deeplink: Mapped[str | None] = mapped_column(Text)
     receipt_url: Mapped[str | None] = mapped_column(Text)
+    substitution_status: Mapped[str | None] = mapped_column(String(32))
+    substitution_medication: Mapped[str | None] = mapped_column(String(255))
+    substitution_note: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    requested_via: Mapped[str | None] = mapped_column(String(32))
 
     patient: Mapped[Patient] = relationship(back_populates="orders")
 

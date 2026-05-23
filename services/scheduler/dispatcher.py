@@ -54,6 +54,9 @@ _PREGNANCY_MILESTONE_EVENT_TYPES: frozenset[str] = frozenset(
 _PREGNANCY_WEEKLY_EVENT_TYPES: frozenset[str] = frozenset(
     {"pregnancy_weekly_due"}
 )
+_SUBSTITUTION_EVENT_TYPES: frozenset[str] = frozenset(
+    {"order_substitution_request"}
+)
 
 # How late a reminder can be before we drop it as stale. T-1h has a much
 # tighter window — a "1 hour before" reminder that arrives 45 minutes after
@@ -76,6 +79,9 @@ _FRESHNESS_BY_EVENT: dict[str, timedelta] = {
     # a weekly check-in a day or two late is still useful.
     "pregnancy_milestone_due": timedelta(hours=48),
     "pregnancy_weekly_due": timedelta(hours=48),
+    # A substitution request stays useful for a while — the patient's reorder
+    # is blocked until they decide.
+    "order_substitution_request": timedelta(hours=48),
 }
 
 # Approved Meta template name for outside-CSW APPOINTMENT reminders.
@@ -117,11 +123,23 @@ _LAB_TEMPLATE_NAME = os.getenv(
 _PREGNANCY_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_PREGNANCY_TEMPLATE_NAME", "pregnancy_weekly_v1"
 )
+# Approved Meta template for outside-CSW substitution-approval requests.
+# 2 body params (original med, proposed substitute) + Approve / Decline
+# quick-reply buttons.
+_SUBSTITUTION_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_SUBSTITUTION_TEMPLATE_NAME", "substitution_approval_v1"
+)
 # Test override: set WHATSAPP_FORCE_REMINDER_TEMPLATE=1 to always use the
 # template path (handy for verifying the outside-CSW route while the patient
 # is actually in-CSW).
 _FORCE_TEMPLATE = os.getenv("WHATSAPP_FORCE_REMINDER_TEMPLATE", "0") == "1"
 _CSW_HOURS = 24
+# WhatsApp caps interactive replies at 3 buttons. When the refill execute
+# layer is enabled, the "Reorder" CTA replaces "Snooze" on refill reminders
+# (the two natural responses to a low-supply prompt are "I refilled" and
+# "reorder for me"). Off by default so deployments without a fulfillment
+# partner keep the legacy Refilled / Snooze / Need help set.
+_REORDER_ENABLED = os.getenv("REFILL_REORDER_ENABLED", "0") == "1"
 
 
 class ReminderNotApplicable(Exception):
@@ -358,17 +376,30 @@ async def _build_refill_reminder(
             "label": "Refilled",
             "action": "refill_done",
         },
-        {
-            "id": f"refill_snoozed:{regimen_id}",
-            "label": "Snooze 1 day",
-            "action": "refill_snoozed",
-        },
+    ]
+    if _REORDER_ENABLED:
+        buttons.append(
+            {
+                "id": f"refill_reorder:{regimen_id}",
+                "label": "Reorder",
+                "action": "refill_reorder",
+            }
+        )
+    else:
+        buttons.append(
+            {
+                "id": f"refill_snoozed:{regimen_id}",
+                "label": "Snooze 1 day",
+                "action": "refill_snoozed",
+            }
+        )
+    buttons.append(
         {
             "id": f"refill_help:{regimen_id}",
             "label": "Need help",
             "action": "refill_help",
-        },
-    ]
+        }
+    )
 
     in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
     if in_csw:
@@ -641,6 +672,75 @@ async def _build_pregnancy_milestone_reminder(
             "2_week": str(week),
             "3_focus": focus,
         },
+    }
+
+
+async def _build_substitution_request(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Build the WhatsApp send asking a patient to approve/decline a
+    partner-proposed substitution on an order.
+
+    In-CSW: freeform interactive Approve / Decline buttons. Out-of-CSW:
+    ``substitution_approval_v1`` template (params: original med, substitute).
+    The tap is decoded by the webhook into
+    ``[order-action] sub_approve|sub_decline order_id={id}``.
+    """
+    from app.db.repositories import orders as orders_repo
+
+    payload = dict(event.payload or {})
+    order_id = payload.get("order_id")
+    if not order_id:
+        raise ValueError("substitution payload missing order_id")
+    order = await orders_repo.get(db, int(order_id))
+    if order is None:
+        raise ReminderNotApplicable(f"order {order_id} not found")
+    if order.substitution_status != "proposed":
+        raise ReminderNotApplicable(
+            f"order {order_id} substitution is {order.substitution_status}"
+            " — not prompting"
+        )
+
+    original = order.medication_name
+    substitute = order.substitution_medication or "an equivalent medicine"
+    body = (
+        f"Your pharmacy is out of {original} and can dispense {substitute} "
+        f"instead (same active medicine). Approve this substitution?"
+    )
+    buttons = [
+        {
+            "id": f"order_sub_approve:{order_id}",
+            "label": "Approve",
+            "action": "order_sub_approve",
+        },
+        {
+            "id": f"order_sub_decline:{order_id}",
+            "label": "Decline",
+            "action": "order_sub_decline",
+        },
+    ]
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+            "buttons": buttons,
+        }
+
+    log.info(
+        "substitution request %s: out-of-CSW for patient %s — template %s",
+        event.id,
+        event.patient_id,
+        _SUBSTITUTION_TEMPLATE_NAME,
+    )
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _SUBSTITUTION_TEMPLATE_NAME,
+        "template_params": {"1_original": original, "2_substitute": substitute},
     }
 
 
@@ -1113,6 +1213,12 @@ async def dispatch(
                     f"pregnancy weekly dispatch requires db (event {event.id})"
                 )
             message = await _build_pregnancy_weekly_reminder(db, event)
+        elif event.event_type in _SUBSTITUTION_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"substitution dispatch requires db (event {event.id})"
+                )
+            message = await _build_substitution_request(db, event)
         else:
             message = _build_message_out(event)
     except ReminderNotApplicable as exc:

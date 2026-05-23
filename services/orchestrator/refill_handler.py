@@ -24,10 +24,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.db.repositories import ops_tickets as ops_tickets_repo
+from app.db.repositories import orders as orders_repo
 from app.db.repositories import patients as patients_repo
 from app.db.repositories import regimens as regimens_repo
 from app.db.repositories import scheduled_events as scheduled_events_repo
 from app.db.session import get_sessionmaker
+from services.orchestrator.pharmacy import OrderRequest, get_pharmacy_adapter
 from services.scheduler import refill_reminders
 
 log = logging.getLogger(__name__)
@@ -43,7 +45,7 @@ HELP_TICKET_PRIORITY = "p3"
 HELP_TICKET_SLA_MINUTES = 1440  # 24h
 
 _REFILL_ACTION_RE = re.compile(
-    r"^\s*\[refill-action\]\s+(?P<action>done|snoozed|help)\s+"
+    r"^\s*\[refill-action\]\s+(?P<action>done|snoozed|help|reorder)\s+"
     r"regimen_id\s*=\s*(?P<id>\d+)\s*$",
     re.I,
 )
@@ -167,6 +169,67 @@ async def handle_refill_action(
                 f"tomorrow.",
                 audit_codes=["refill_action_snoozed"],
             )
+
+        if action == "reorder":
+            # Dedupe: if there's already an in-flight order for this regimen,
+            # don't create a second one.
+            existing_order = await orders_repo.get_open_for_regimen(
+                db, regimen_id
+            )
+            if existing_order is not None:
+                link_line = (
+                    f"\n\nComplete it here: {existing_order.partner_deeplink}"
+                    if existing_order.partner_deeplink
+                    else ""
+                )
+                return _reply(
+                    f"You already have a reorder in progress for {med_label} "
+                    f"(status: {existing_order.status}).{link_line}",
+                    audit_codes=["refill_action_reorder_already_open"],
+                )
+
+            # Hand off to the (replaceable) pharmacy partner adapter.
+            adapter = get_pharmacy_adapter()
+            result = await adapter.place_order(
+                OrderRequest(
+                    patient_phone=patient_phone,
+                    medication_name=regimen.medication_name,
+                    dose=regimen.dose,
+                    quantity=None,
+                    regimen_id=regimen.id,
+                )
+            )
+            order = await orders_repo.create(
+                db,
+                patient_id=regimen.patient_id,
+                regimen_id=regimen.id,
+                medication_name=regimen.medication_name,
+                dose=regimen.dose,
+                partner=result.partner,
+                partner_order_id=result.partner_order_id,
+                partner_deeplink=result.deeplink,
+                status=result.status,
+                requested_via="refill_button",
+            )
+            await db.commit()
+            log.info(
+                "reorder %s created for patient %s (regimen=%s, partner=%s)",
+                order.id,
+                patient_phone,
+                regimen_id,
+                result.partner,
+            )
+            if result.deeplink:
+                body = (
+                    f"Reorder started for {med_label}. Tap to complete it with "
+                    f"the pharmacy: {result.deeplink}"
+                )
+            else:
+                body = (
+                    f"Reorder placed for {med_label}. Our team will arrange it "
+                    f"and confirm shortly. ✓"
+                )
+            return _reply(body, audit_codes=["refill_action_reorder"])
 
         # action == "help"
         existing = await ops_tickets_repo.find_open_for_patient_category(

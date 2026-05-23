@@ -1,0 +1,26 @@
+{
+  "name": "substitution_approval_v1",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Your pharmacy is out of {{1}} and can dispense {{2}} instead (same active medicine). Would you like to approve this substitution?",
+      "example": {
+        "body_text": [
+          [
+            "Metformin 500mg (Brand A)",
+            "Metformin 500mg (Brand B)"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        { "type": "QUICK_REPLY", "text": "Approve" },
+        { "type": "QUICK_REPLY", "text": "Decline" }
+      ]
+    }
+  ]
+}

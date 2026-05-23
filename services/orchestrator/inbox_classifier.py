@@ -63,6 +63,7 @@ _TAP_PREFIXES: tuple[str, ...] = (
     "[refill-action]",
     "[recap-action]",
     "[appt-action]",
+    "[order-action]",
 )
 
 
