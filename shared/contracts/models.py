@@ -44,7 +44,11 @@ class MessageIn(BaseModel):
     phone: str | None = None
 
     content_type: MessageContentType = MessageContentType.TEXT
-    text: str | None = None
+    # Cap inbound text length: WhatsApp itself maxes out at 4096 chars, so this
+    # generous bound never rejects a legitimate message but stops an abusive /
+    # malformed caller from feeding an unbounded blob into the LLM (token-cost /
+    # DoS) or the DB.
+    text: str | None = Field(default=None, max_length=8000)
     voice_url: str | None = None
     audio_url: HttpUrl | None = None
     audio_duration_seconds: int | None = Field(default=None, ge=0)
