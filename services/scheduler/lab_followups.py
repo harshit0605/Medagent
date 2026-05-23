@@ -128,17 +128,18 @@ async def cancel_for_lab_followup(
 async def _list_pending_for_lab(
     db: AsyncSession, *, lab_followup_id: int
 ) -> list[ScheduledEvent]:
+    # Filter the payload key in SQL rather than fetching all pending lab events
+    # and filtering in Python.
     stmt = (
         select(ScheduledEvent)
         .where(ScheduledEvent.event_type == LAB_EVENT_TYPE)
         .where(ScheduledEvent.status == ScheduledEventStatus.pending)
+        .where(
+            ScheduledEvent.payload["lab_followup_id"].as_string()
+            == str(lab_followup_id)
+        )
     )
-    rows = list((await db.execute(stmt)).scalars().all())
-    return [
-        r
-        for r in rows
-        if (r.payload or {}).get("lab_followup_id") == lab_followup_id
-    ]
+    return list((await db.execute(stmt)).scalars().all())
 
 
 async def materialize_for_all_open(

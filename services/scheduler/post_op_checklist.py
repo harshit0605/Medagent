@@ -50,15 +50,17 @@ def _target_utc(target_date, tz: ZoneInfo) -> datetime:
 async def _list_pending_for_episode(
     db: AsyncSession, *, episode_id: int
 ) -> list[ScheduledEvent]:
+    # Filter the payload key in SQL rather than fetching all pending post-op
+    # events and filtering in Python.
     stmt = (
         select(ScheduledEvent)
         .where(ScheduledEvent.event_type == POST_OP_CHECK_EVENT_TYPE)
         .where(ScheduledEvent.status == ScheduledEventStatus.pending)
+        .where(
+            ScheduledEvent.payload["episode_id"].as_string() == str(episode_id)
+        )
     )
-    rows = list((await db.execute(stmt)).scalars().all())
-    return [
-        r for r in rows if (r.payload or {}).get("episode_id") == episode_id
-    ]
+    return list((await db.execute(stmt)).scalars().all())
 
 
 async def cancel_for_episode(

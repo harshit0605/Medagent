@@ -1119,6 +1119,12 @@ class MetricObservation(Base):
             "goal_id",
             "observed_at",
         ),
+        # Weekly-trend sweep: WHERE source=... AND observed_at >= cutoff.
+        Index(
+            "ix_metric_observations_source_observed",
+            "source",
+            "observed_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -1601,6 +1607,8 @@ class ScheduledEvent(Base):
     __table_args__ = (
         Index("ix_scheduled_events_status_scheduled_for", "status", "scheduled_for"),
         Index("ix_scheduled_events_patient", "patient_id"),
+        # Materializer dedupe: WHERE event_type IN (...) AND status='pending'.
+        Index("ix_scheduled_events_type_status", "event_type", "status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

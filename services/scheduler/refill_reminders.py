@@ -189,21 +189,21 @@ async def _list_pending_refills_for_regimen(
     regimen_id: int,
     cycle_key: str | None = None,
 ) -> list[ScheduledEvent]:
+    # Filter the payload keys in SQL rather than fetching all pending refill
+    # events and filtering in Python.
     stmt = (
         select(ScheduledEvent)
         .where(ScheduledEvent.event_type == REFILL_EVENT_TYPE)
         .where(ScheduledEvent.status == ScheduledEventStatus.pending)
+        .where(
+            ScheduledEvent.payload["regimen_id"].as_string() == str(regimen_id)
+        )
     )
-    rows = list((await db.execute(stmt)).scalars().all())
-    out: list[ScheduledEvent] = []
-    for row in rows:
-        payload = row.payload or {}
-        if payload.get("regimen_id") != regimen_id:
-            continue
-        if cycle_key is not None and payload.get("cycle_key") != cycle_key:
-            continue
-        out.append(row)
-    return out
+    if cycle_key is not None:
+        stmt = stmt.where(
+            ScheduledEvent.payload["cycle_key"].as_string() == cycle_key
+        )
+    return list((await db.execute(stmt)).scalars().all())
 
 
 async def materialize_for_all_active_regimens(

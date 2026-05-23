@@ -74,17 +74,19 @@ def _target_utc(target_date, tz: ZoneInfo) -> datetime:
 async def _list_pending_for_pregnancy(
     db: AsyncSession, *, pregnancy_id: int
 ) -> list[ScheduledEvent]:
+    # Filter the payload key in SQL (payload ->> 'pregnancy_id') instead of
+    # fetching ALL pending pregnancy events and filtering in Python — the
+    # latter is O(all pending) per pregnancy.
     stmt = (
         select(ScheduledEvent)
         .where(ScheduledEvent.event_type.in_(_OUR_EVENT_TYPES))
         .where(ScheduledEvent.status == ScheduledEventStatus.pending)
+        .where(
+            ScheduledEvent.payload["pregnancy_id"].as_string()
+            == str(pregnancy_id)
+        )
     )
-    rows = list((await db.execute(stmt)).scalars().all())
-    return [
-        r
-        for r in rows
-        if (r.payload or {}).get("pregnancy_id") == pregnancy_id
-    ]
+    return list((await db.execute(stmt)).scalars().all())
 
 
 async def cancel_for_pregnancy(
