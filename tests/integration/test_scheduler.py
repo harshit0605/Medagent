@@ -14,7 +14,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
 
 pytestmark = pytest.mark.skipif(
@@ -160,23 +159,55 @@ def test_emit_dose_due_inserts_pending_row(scheduler_client, patient_id):
     assert len(pending) == 1
 
 
-@pytest.mark.skip(
-    reason=(
-        "Pre-existing contract mismatch: /emit-refill-due "
-        "doesn't expose regimen_id but dispatcher requires "
-        "it. Test needs rework to seed a regimen first and "
-        "use a regimen-aware emit path. Out of scope for "
-        "slice 20 (test-pollution cleanup)."
-    )
-)
+def _seed_patient_and_regimen(phone: str) -> int:
+    """Seed a patient (phone=wa_id) + an active regimen; return
+    regimen_id. The dispatcher's refill branch looks the regimen up to
+    validate it + build the Refilled button, so a real row must exist."""
+    import asyncio as _asyncio
+
+    from app.db.models import Patient
+    from app.db.repositories import regimens as regimens_repo
+    from app.db.session import get_sessionmaker
+
+    async def _seed() -> int:
+        SessionLocal = get_sessionmaker()
+        async with SessionLocal() as db:
+            p = Patient(
+                full_name="Refill Dispatch Test",
+                phone=phone,
+                consent_sms=True,
+            )
+            db.add(p)
+            await db.flush()
+            r = await regimens_repo.create(
+                db,
+                patient_id=p.id,
+                medication_name="atorvastatin",
+                dose="10 mg",
+                schedule={
+                    "type": "times_of_day",
+                    "times": ["20:00"],
+                    "timezone": "Asia/Kolkata",
+                    "frequency": "daily",
+                },
+            )
+            await db.commit()
+            return r.id
+
+    return _asyncio.run(_seed())
+
+
 def test_tick_dispatches_due_events_and_marks_dispatched(
     scheduler_client, patient_id, patch_dispatch_to_gateway, gateway_client
 ):
+    regimen_id = _seed_patient_and_regimen(patient_id)
     response = scheduler_client.post(
         "/emit-refill-due",
         json={
             "patient_id": patient_id,
+            "regimen_id": regimen_id,
             "medication_name": "atorvastatin",
+            "dose": "10 mg",
             "days_left": 3,
         },
     )

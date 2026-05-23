@@ -928,6 +928,15 @@ class RefillDueRequest(BaseModel):
     patient_id: str = Field(min_length=1)
     medication_name: str = Field(min_length=1)
     days_left: int = Field(ge=0)
+    # regimen_id is REQUIRED for the event to actually dispatch — the
+    # dispatcher's refill branch (services/scheduler/dispatcher.py)
+    # looks the regimen up to validate ends_on + supply cycle and to
+    # build the Refilled button id. Optional in the schema only so the
+    # production materializer (refill_reminders.py) — which always sets
+    # it — and legacy callers don't 422; an emit without it enqueues a
+    # row the dispatcher will skip as "missing regimen_id".
+    regimen_id: int | None = None
+    dose: str | None = None
     scheduled_for: datetime | None = None
 
 
@@ -1003,14 +1012,22 @@ async def emit_dose_due(
 async def emit_refill_due(
     payload: RefillDueRequest, db: AsyncSession = Depends(get_session)
 ) -> ScheduledEventDTO:
+    # Build a payload shaped exactly like the production materializer
+    # (refill_reminders.py) so the dispatcher's refill branch can render
+    # it: regimen_id (for lookup + Refilled button), medication_name,
+    # dose, stage (dispatcher reads "stage", NOT "refill_stage"), and
+    # days_left. cycle_key is intentionally omitted for manual emits so
+    # the dispatcher skips the supply-cycle drift check.
     row = await scheduled_events_repo.enqueue(
         db,
         event_type="refill_due",
         patient_id=payload.patient_id,
         payload={
+            "regimen_id": payload.regimen_id,
             "medication_name": payload.medication_name,
+            "dose": payload.dose,
             "days_left": payload.days_left,
-            "refill_stage": _refill_stage(payload.days_left),
+            "stage": _refill_stage(payload.days_left),
             "actions": "REORDER/UPDATE COUNT",
         },
         scheduled_for=payload.scheduled_for,
