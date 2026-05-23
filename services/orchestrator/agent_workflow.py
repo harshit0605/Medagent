@@ -386,6 +386,42 @@ async def run_agent_workflow(
                     ),
                 )
 
+    # Asthma self-report short-circuit (rescue-inhaler use / trigger diary) —
+    # sync-fallback parity with the graph router's asthma_handler. Safety
+    # first: if the message also reads as a symptom, defer to triage.
+    if inbound_text:
+        from services.orchestrator.asthma_handler import (
+            handle_asthma_log,
+            looks_like_asthma_log,
+        )
+        from services.orchestrator.side_effect_handler import (
+            looks_like_side_effect_report,
+        )
+
+        if looks_like_asthma_log(inbound_text) and not looks_like_side_effect_report(
+            inbound_text
+        ):
+            delta = await handle_asthma_log(
+                patient_phone=patient_id, new_user_text=inbound_text
+            )
+            if delta is not None:
+                return WorkflowResult(
+                    intent="adherence_update",
+                    risk_level="low",
+                    use_template=False,
+                    policy_reason="asthma_self_report",
+                    policy_reason_codes=("asthma_self_report",),
+                    flow_action="ALLOW",
+                    escalation_required=False,
+                    escalation_reason=None,
+                    response_body=delta["response_body"],
+                    template_name=None,
+                    quick_replies=["CALL", "HELP"],
+                    audit_reasons=delta.get(
+                        "audit_reasons", ["asthma_self_report"]
+                    ),
+                )
+
     intent = await _detect_intent(inbound_text)
     decision = await _evaluate_policy_decision(
         patient_id=patient_id,
@@ -738,6 +774,25 @@ async def _vitals_handler_node(state: AgentState) -> dict[str, Any]:
     return delta
 
 
+async def _asthma_handler_node(state: AgentState) -> dict[str, Any]:
+    """Asthma self-report: rescue-inhaler use ("used my reliever 3 times") or
+    trigger diary ("trigger: dust"). Persist + ack; high reliever use opens an
+    ops ticket. Skips intent / safety / LLM."""
+    from services.orchestrator.asthma_handler import handle_asthma_log
+
+    delta = await handle_asthma_log(
+        patient_phone=state.get("patient_id", ""),
+        new_user_text=state.get("text", ""),
+    )
+    if delta is None:
+        return {"audit_reasons": ["asthma_no_patient"]}
+    delta.setdefault(
+        "messages", [{"role": "assistant", "content": delta["response_body"]}]
+    )
+    delta.setdefault("flow_action", "ALLOW")
+    return delta
+
+
 async def _optout_handler_node(state: AgentState) -> dict[str, Any]:
     """STOP / START keyword inbound. Routes to handle_optout when the
     inbound looks like opt-out, handle_optin otherwise (the router
@@ -828,6 +883,7 @@ def _route_for_onboarding(
     )
     from services.orchestrator.recap_handler import looks_like_recap_action
     from services.orchestrator.refill_handler import looks_like_refill_action
+    from services.orchestrator.asthma_handler import looks_like_asthma_log
     from services.orchestrator.side_effect_handler import (
         looks_like_side_effect_report,
     )
@@ -872,6 +928,11 @@ def _route_for_onboarding(
     # numbers don't register.
     if looks_like_vitals_log(text):
         return "vitals_handler"
+    # Asthma self-report (rescue-inhaler use / trigger diary) AFTER side-effect
+    # for the same safety reason; parsers are conservative so a controller dose
+    # or stray number doesn't register.
+    if looks_like_asthma_log(text):
+        return "asthma_handler"
     # Self-service lookup queries — strict-anchored classifier so
     # generic mentions of meds/labs ("I forgot to take my meds")
     # don't accidentally route here. Misses fall through to the LLM.
@@ -1050,6 +1111,7 @@ def build_langgraph_workflow(
     graph.add_node("recap_handler", _recap_handler_node)
     graph.add_node("caregiver_handler", _caregiver_handler_node)
     graph.add_node("vitals_handler", _vitals_handler_node)
+    graph.add_node("asthma_handler", _asthma_handler_node)
     graph.add_node("detect_intent", _detect_intent_node)
     graph.add_node("policy", _policy_node)
     graph.add_node("safety", _safety_node)
@@ -1076,6 +1138,7 @@ def build_langgraph_workflow(
             "caregiver_handler": "caregiver_handler",
             "side_effect_handler": "side_effect_handler",
             "vitals_handler": "vitals_handler",
+            "asthma_handler": "asthma_handler",
             "lookup_handler": "lookup_handler",
             "detect_intent": "detect_intent",
         },
@@ -1104,6 +1167,7 @@ def build_langgraph_workflow(
     graph.add_edge("recap_handler", END)
     graph.add_edge("caregiver_handler", END)
     graph.add_edge("vitals_handler", END)
+    graph.add_edge("asthma_handler", END)
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer)

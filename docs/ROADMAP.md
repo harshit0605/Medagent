@@ -74,12 +74,18 @@ full timeline engine.
   `pregnancy_checklist` reply (current week + next milestone). Logged under #13._
 - **SoT ref:** §3F, V1 deliverable "Pregnancy timeline pack", Epic 6
 
-### P5 — 🔴 Asthma cohort pack + first-class cohort flags  · _task #11_
-Asthma entirely absent. Cohort flags are only `diabetes/cardiac/fall_risk`;
-**asthma/post_op/pregnancy have no first-class flag.**
-- [ ] Migration: add cohort flags (asthma, post_op, pregnancy)
-- [ ] Asthma flows: controller reminders, rescue-usage tracking, trigger
-      diary, puff-based refill estimation
+### P5 — ✅ Asthma cohort pack + first-class cohort flags  · _task #11 — DONE_
+Asthma was entirely absent; cohorts were only `diabetes/cardiac/fall_risk`.
+- [x] Migration: add cohort flags (asthma, post_op, pregnancy) + backfill
+      `cohort_pregnancy` from active pregnancies; wired into broadcast +
+      care-plan allowlists + onboarding + the pregnancy endpoints (flag sync)
+- [x] Asthma rescue-usage tracking (regex parse → `metric_observation` +
+      rolling-7d poor-control detection → idempotent `asthma_control` ops
+      ticket) + trigger diary (`asthma_trigger_logs`) — both routed like
+      vitals (graph node + sync fallback, safety-deferred), voice-compatible
+- _Controller reminders already covered by the existing dose-reminder engine
+  (a controller inhaler is a regimen). Puff-based refill estimation deferred
+  (overlaps the refill/partner layer); logged under #13._
 - **SoT ref:** §3C, V1 "Asthma rescue/puff analytics", Epic 6
 
 ### P6 — 🔴 Partner / refill execute layer  · _task #12_
@@ -124,6 +130,27 @@ template exists with no flow.
 ---
 
 ## Progress log
+- 2026-05-23 — **P5 asthma cohort + first-class cohort flags: DONE.** Migration
+  0039 adds `cohort_asthma` / `cohort_post_op` / `cohort_pregnancy` booleans to
+  patients (backfilling pregnancy from active episodes) + an
+  `asthma_trigger_logs` table. The three flags are wired into the broadcast
+  cohort allowlist, care-plan `KNOWN_COHORT_ATTRS`, `update_onboarding`, and the
+  pregnancy create/end endpoints (which now keep `cohort_pregnancy` in sync).
+  New `services/orchestrator/asthma_handler.py` — conservative regex parsers for
+  rescue-inhaler use ("used my reliever 3 times", "2 puffs salbutamol"; a bare
+  "took my inhaler" is treated as a *controller* dose, not rescue) and the
+  trigger diary ("trigger: dust"). Rescue use → `metric_observation`
+  (rescue_inhaler_puffs) + a rolling-7-day control check (≥8 puffs OR ≥3 days)
+  that opens an idempotent `asthma_control` ops ticket; triggers →
+  `asthma_trigger_logs`. Routed exactly like vitals — new `asthma_handler` graph
+  node + sync-fallback short-circuit, ranked AFTER side-effect so a rescue
+  report bundled with a symptom routes to triage first. Works over transcribed
+  voice (rides P3). Tests: 8 unit (parsers: counts, word-counts, controller
+  rejection, trigger variants) + 8 integration (persist, poor-control
+  idempotent ticket, trigger diary, /route e2e, safety deferral, asthma-cohort
+  broadcast targeting, pregnancy-flag sync). 577 unit pass; asthma + routing
+  regression green; ruff clean (new files). Migration applied (0038→0039).
+  **Next: P6 partner / refill execute layer.**
 - 2026-05-23 — **P4 pregnancy timeline engine: DONE.** New `pregnancies` table
   (migration 0038, partial unique index = one active pregnancy per patient) +
   `Pregnancy`/`PregnancyStatus` model + repo. Pure math module

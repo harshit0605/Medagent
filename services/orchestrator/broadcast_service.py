@@ -54,12 +54,16 @@ log = logging.getLogger(__name__)
 
 
 # Cohort-filter shape:
-#   {"cohort": "diabetes" | "cardiac" | "fall_risk"}
+#   {"cohort": "diabetes" | "cardiac" | "fall_risk" | "asthma"
+#             | "post_op" | "pregnancy"}
 # Future v2 supports cohort_tag_id + composite filters.
 _LEGACY_COHORT_FIELDS: dict[str, str] = {
     "diabetes": "cohort_diabetes",
     "cardiac": "cohort_cardiac",
     "fall_risk": "cohort_fall_risk",
+    "asthma": "cohort_asthma",
+    "post_op": "cohort_post_op",
+    "pregnancy": "cohort_pregnancy",
 }
 
 

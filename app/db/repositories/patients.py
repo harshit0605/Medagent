@@ -61,6 +61,9 @@ async def update_onboarding(
     cohort_diabetes: bool | None = None,
     cohort_cardiac: bool | None = None,
     cohort_fall_risk: bool | None = None,
+    cohort_asthma: bool | None = None,
+    cohort_post_op: bool | None = None,
+    cohort_pregnancy: bool | None = None,
     consent_sms: bool | None = None,
 ) -> Patient | None:
     """Apply onboarding state transitions in a single shot. Each kwarg is
@@ -85,6 +88,12 @@ async def update_onboarding(
         row.cohort_cardiac = cohort_cardiac
     if cohort_fall_risk is not None:
         row.cohort_fall_risk = cohort_fall_risk
+    if cohort_asthma is not None:
+        row.cohort_asthma = cohort_asthma
+    if cohort_post_op is not None:
+        row.cohort_post_op = cohort_post_op
+    if cohort_pregnancy is not None:
+        row.cohort_pregnancy = cohort_pregnancy
     if consent_sms is not None:
         row.consent_sms = consent_sms
     await session.flush()

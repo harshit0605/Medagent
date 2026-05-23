@@ -5980,6 +5980,11 @@ async def create_pregnancy(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
+    # Keep the first-class cohort flag in sync so broadcasts / care-plan
+    # targeting / dashboards see this patient as pregnant.
+    patient.cohort_pregnancy = True
+    await db.flush()
+
     # Materialize the first batch of reminders eagerly.
     if patient.phone:
         try:
@@ -6041,6 +6046,11 @@ async def end_pregnancy(
     await pregnancy_milestones.cancel_for_pregnancy(
         db, pregnancy_id=pregnancy_id
     )
+    # Clear the cohort flag — the episode is over.
+    patient = await patients_repo.get(db, patient_id)
+    if patient is not None:
+        patient.cohort_pregnancy = False
+        await db.flush()
     dto = _pregnancy_to_dto(row)
     await db.commit()
     return dto

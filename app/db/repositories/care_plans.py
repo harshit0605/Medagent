@@ -15,6 +15,9 @@ KNOWN_COHORT_ATTRS: tuple[str, ...] = (
     "cohort_diabetes",
     "cohort_cardiac",
     "cohort_fall_risk",
+    "cohort_asthma",
+    "cohort_post_op",
+    "cohort_pregnancy",
 )
 
 

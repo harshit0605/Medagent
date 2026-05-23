@@ -144,6 +144,15 @@ class Patient(TimestampMixin, Base):
     cohort_fall_risk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cohort_diabetes: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cohort_cardiac: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cohort_asthma: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    cohort_post_op: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    cohort_pregnancy: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     # ISO-639-1 (with optional region) — e.g. ``en``, ``hi``, ``ta``,
     # ``en-IN``. Drives LLM-generated outbound copy (recaps, free-form
@@ -1618,3 +1627,36 @@ class Pregnancy(TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     patient: Mapped[Patient] = relationship(back_populates="pregnancies")
+
+
+class AsthmaTriggerLog(Base):
+    """A single asthma trigger the patient logged ("dust", "exercise",
+    "cold air"). Powers the trigger diary / voice trigger diary (SoT §3C) so
+    the clinic can spot patterns. Categorical free-text — distinct from the
+    numeric ``metric_observations`` used for rescue-inhaler puff counts.
+
+    ``logged_at`` is when the patient reported it (defaults to insert time);
+    ``source`` distinguishes patient_self_report vs voice vs manual entry.
+    """
+
+    __tablename__ = "asthma_trigger_logs"
+    __table_args__ = (
+        Index(
+            "ix_asthma_trigger_logs_patient_logged", "patient_id", "logged_at"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[int] = mapped_column(
+        ForeignKey("patients.id", ondelete="CASCADE"), nullable=False
+    )
+    trigger_text: Mapped[str] = mapped_column(String(255), nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="patient_self_report"
+    )
+    logged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
