@@ -65,6 +65,31 @@ async def active_plan_ids_for_patient(
     return set(rows)
 
 
+async def exempt_patient_ids_for_plan(
+    session: AsyncSession,
+    *,
+    care_plan_id: int,
+    patient_ids: list[int],
+    now: datetime | None = None,
+) -> set[int]:
+    """Which of ``patient_ids`` are currently exempted from ``care_plan_id``.
+
+    Batched companion to ``active_plan_ids_for_patient`` (same
+    ``_active_predicate``) for the care-gap count / sweep, which check a whole
+    cohort against one plan at once — one query instead of one per patient.
+    """
+    if not patient_ids:
+        return set()
+    when = _ensure_utc(now or datetime.now(timezone.utc))
+    stmt = (
+        select(CarePlanExemption.patient_id)
+        .where(CarePlanExemption.care_plan_id == care_plan_id)
+        .where(CarePlanExemption.patient_id.in_(patient_ids))
+        .where(_active_predicate(when))
+    )
+    return set((await session.execute(stmt)).scalars().all())
+
+
 async def list_for_patient(
     session: AsyncSession,
     patient_id: int,

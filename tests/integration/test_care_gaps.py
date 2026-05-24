@@ -335,3 +335,94 @@ async def test_overdue_care_gap_count_matches_sweep():
             db, patient_id=diabetic_id, test_name="HbA1c"
         )
     assert had_open_after is True
+
+
+async def test_overdue_care_gap_count_batched_equals_per_patient():
+    """The batched count must equal a straight per-patient computation over
+    the SAME live data — robust to whatever else is in the (isolated) cohort
+    because it compares the two implementations against identical rows rather
+    than a fixed number. Seeds one patient in each gate state so all four
+    batch helpers (cohort / exempt / open / recent) are exercised."""
+    from app.db.models import CarePlanExemption
+    from app.db.repositories import care_plans as care_plans_repo
+    from app.db.repositories import (
+        care_plan_exemptions as cpe_repo,
+    )
+    from services.scheduler.care_gaps import (
+        _has_open_followup,
+        _last_completed_at,
+        _patients_in_cohort,
+        load_active_plans,
+    )
+
+    # Two genuine gaps (no history) + one of each skip state below.
+    await _seed_patient(cohort_diabetes=True)
+    await _seed_patient(cohort_diabetes=True)
+    open_pt = await _seed_patient(cohort_diabetes=True)
+    recent_pt = await _seed_patient(cohort_diabetes=True)
+    exempt_pt = await _seed_patient(cohort_diabetes=True)
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        plans = await care_plans_repo.list_active(db)
+        hba1c = next(
+            p
+            for p in plans
+            if p.test_name == "HbA1c" and p.cohort_attr == "cohort_diabetes"
+        )
+        # open_pt: a due HbA1c followup → not a gap.
+        db.add(
+            LabFollowup(
+                patient_id=open_pt,
+                test_name="HbA1c",
+                status=FollowupStatus.due,
+            )
+        )
+        # recent_pt: a completed HbA1c within cadence → not a gap.
+        db.add(
+            LabFollowup(
+                patient_id=recent_pt,
+                test_name="HbA1c",
+                status=FollowupStatus.completed,
+                completed_at=datetime.now(timezone.utc) - timedelta(days=1),
+            )
+        )
+        # exempt_pt: an active exemption from the HbA1c plan → not a gap.
+        db.add(
+            CarePlanExemption(
+                patient_id=exempt_pt,
+                care_plan_id=hba1c.id,  # ORM PK == dataclass plan_id
+                reason="test exemption",
+            )
+        )
+        await db.commit()
+
+    async with SessionLocal() as db:
+        # Reference: the original per-patient computation.
+        now = datetime.now(timezone.utc)
+        plans = await load_active_plans(db)
+        expected = 0
+        for plan in plans:
+            cadence = timedelta(days=plan.cadence_days)
+            for patient in await _patients_in_cohort(db, plan):
+                exempt = await cpe_repo.active_plan_ids_for_patient(
+                    db, patient.id, now=now
+                )
+                if plan.plan_id in exempt:
+                    continue
+                if await _has_open_followup(
+                    db, patient_id=patient.id, test_name=plan.test_name
+                ):
+                    continue
+                last_done = await _last_completed_at(
+                    db, patient_id=patient.id, test_name=plan.test_name
+                )
+                if last_done is not None and (now - last_done) < cadence:
+                    continue
+                expected += 1
+
+        actual = await care_gaps.overdue_care_gap_count(db)
+
+    # Batched == per-patient, and the two genuine gaps are counted.
+    assert actual == expected
+    assert actual >= 2

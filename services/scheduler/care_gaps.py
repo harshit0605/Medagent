@@ -28,7 +28,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import CarePlan as CarePlanModel
@@ -233,34 +233,108 @@ async def sweep_care_gaps(
     return out
 
 
+async def _patients_with_open_followup(
+    db: AsyncSession, *, patient_ids: list[int], test_name: str
+) -> set[int]:
+    """Subset of ``patient_ids`` with a ``due``/``booked`` followup matching
+    the test (case-insensitive) — the batched form of ``_has_open_followup``."""
+    if not patient_ids:
+        return set()
+    stmt = select(LabFollowup.patient_id).where(
+        LabFollowup.patient_id.in_(patient_ids),
+        LabFollowup.status.in_([FollowupStatus.due, FollowupStatus.booked]),
+        LabFollowup.test_name.ilike(test_name),
+    )
+    return set((await db.execute(stmt)).scalars().all())
+
+
+async def _patients_recently_completed(
+    db: AsyncSession,
+    *,
+    patient_ids: list[int],
+    test_name: str,
+    now: datetime,
+    cadence: timedelta,
+) -> set[int]:
+    """Subset of ``patient_ids`` whose most-recent matching completed/reviewed
+    followup is within ``cadence`` — the batched form of the
+    ``_last_completed_at`` gate. Mirrors it exactly: pick the row with the
+    greatest ``completed_at`` (``desc()`` → NULLS FIRST, same as the per-row
+    helper), prefer ``completed_at`` then fall back to ``reviewed_at``, and
+    compare against ``now - cadence``."""
+    if not patient_ids:
+        return set()
+    ranked = (
+        select(
+            LabFollowup.patient_id.label("pid"),
+            LabFollowup.completed_at.label("completed_at"),
+            LabFollowup.reviewed_at.label("reviewed_at"),
+            func.row_number()
+            .over(
+                partition_by=LabFollowup.patient_id,
+                order_by=desc(LabFollowup.completed_at),
+            )
+            .label("rn"),
+        )
+        .where(
+            LabFollowup.patient_id.in_(patient_ids),
+            LabFollowup.test_name.ilike(test_name),
+            LabFollowup.status.in_(
+                [FollowupStatus.completed, FollowupStatus.reviewed]
+            ),
+        )
+        .subquery()
+    )
+    rows = (
+        await db.execute(
+            select(
+                ranked.c.pid, ranked.c.completed_at, ranked.c.reviewed_at
+            ).where(ranked.c.rn == 1)
+        )
+    ).all()
+    recent: set[int] = set()
+    for pid, completed_at, reviewed_at in rows:
+        when = completed_at or reviewed_at
+        if when is not None and (now - _ensure_utc(when)) < cadence:
+            recent.add(pid)
+    return recent
+
+
 async def overdue_care_gap_count(db: AsyncSession) -> int:
     """Sum of (cohort patients without open or recent followup) across
     all active plans, EXCLUDING patients currently exempted from the
-    matching plan. Cheap enough for a dashboard tile — counts directly
-    without materialising. Same gates as the sweep so the tile and the
-    sweep agree on what counts as a 'gap'."""
+    matching plan. Counts directly without materialising.
+
+    Batched: a handful of queries PER PLAN (cohort + exemptions + open +
+    recent), not three queries per cohort patient — the previous shape was an
+    N+1 that ran on every dashboard load. Same gates, in the same order, as
+    the sweep so the tile and the sweep agree on what counts as a 'gap'."""
     now = datetime.now(timezone.utc)
     plans = await load_active_plans(db)
     total = 0
     for plan in plans:
         cadence = timedelta(days=plan.cadence_days)
-        patients = await _patients_in_cohort(db, plan)
-        for patient in patients:
-            exempted_plan_ids = (
-                await care_plan_exemptions_repo.active_plan_ids_for_patient(
-                    db, patient.id, now=now
-                )
-            )
-            if plan.plan_id in exempted_plan_ids:
-                continue
-            if await _has_open_followup(
-                db, patient_id=patient.id, test_name=plan.test_name
-            ):
-                continue
-            last_done = await _last_completed_at(
-                db, patient_id=patient.id, test_name=plan.test_name
-            )
-            if last_done is not None and (now - last_done) < cadence:
-                continue
-            total += 1
+        patient_ids = [p.id for p in await _patients_in_cohort(db, plan)]
+        if not patient_ids:
+            continue
+        exempt = await care_plan_exemptions_repo.exempt_patient_ids_for_plan(
+            db, care_plan_id=plan.plan_id, patient_ids=patient_ids, now=now
+        )
+        has_open = await _patients_with_open_followup(
+            db, patient_ids=patient_ids, test_name=plan.test_name
+        )
+        recent = await _patients_recently_completed(
+            db,
+            patient_ids=patient_ids,
+            test_name=plan.test_name,
+            now=now,
+            cadence=cadence,
+        )
+        total += sum(
+            1
+            for pid in patient_ids
+            if pid not in exempt
+            and pid not in has_open
+            and pid not in recent
+        )
     return total
