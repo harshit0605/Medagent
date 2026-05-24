@@ -66,6 +66,39 @@ def test_route_persists_inbox_row(orchestrator_client, patient_phone):
     assert row["handler_used"] is not None
 
 
+def test_route_dedupes_replayed_message_id(
+    orchestrator_client, patient_phone
+):
+    """A Meta webhook redelivery (same message_id) must be ignored: the
+    second /route returns a deduped no-op and does NOT re-run the workflow
+    or create a second inbox row."""
+    msg_id = f"msg-dupe-{uuid.uuid4().hex[:8]}"
+    body = {
+        "message": {
+            "message_id": msg_id,
+            "patient_id": patient_phone,
+            "phone": patient_phone,
+            "text": "my sugar was 250 today",
+        }
+    }
+
+    first = orchestrator_client.post("/route", json=body)
+    assert first.status_code == 200
+    assert first.json().get("deduped") is not True
+
+    second = orchestrator_client.post("/route", json=body)
+    assert second.status_code == 200
+    assert second.json().get("deduped") is True
+    # Replay no-op → empty outbound body so the gateway sends nothing.
+    assert second.json()["message_out"]["body"] == ""
+
+    # Only ONE classification row — the replay didn't re-run the workflow.
+    inbox = orchestrator_client.get(
+        "/ops/inbox", params={"patient_phone": patient_phone}
+    ).json()
+    assert len(inbox) == 1
+
+
 def test_action_tap_persists_with_action_tap_category(
     orchestrator_client, patient_phone
 ):

@@ -806,28 +806,58 @@ async def _care_gap_sweep_loop(
 
 
 async def _run_tick_once(*, gateway_url: str | None = None) -> dict[str, Any]:
-    """One async poll cycle: claim due events, dispatch, mark each."""
+    """One async poll cycle: claim due events, dispatch, mark each.
+
+    Commits PER EVENT, not once at the end. ``dispatch`` performs the outbound
+    side effect (the WhatsApp send) before we mark the row; a single commit at
+    the end meant that if any later event raised (a DB blip, a bad row), the
+    whole transaction rolled back — un-marking events we'd ALREADY sent, so the
+    next tick re-dispatched them and the patient got duplicate messages. A
+    per-event commit + per-event rollback bounds the blast radius to one row.
+    """
     SessionLocal = get_sessionmaker()
     dispatched = 0
     failed = 0
     skipped = 0
+    errored = 0
 
     async with SessionLocal() as db:
         due = await scheduled_events_repo.fetch_due(db)
         for event in due:
-            err = await dispatch(event, db=db, gateway_url=gateway_url)
-            if err is None:
-                await scheduled_events_repo.mark_dispatched(db, event.id)
-                dispatched += 1
-            elif any(err.startswith(p) for p in _SKIPPED_PREFIXES):
-                await scheduled_events_repo.mark_skipped(db, event.id, reason=err)
-                skipped += 1
-            else:
-                await scheduled_events_repo.mark_failed(db, event.id, error=err)
-                failed += 1
-        await db.commit()
+            try:
+                err = await dispatch(event, db=db, gateway_url=gateway_url)
+                if err is None:
+                    await scheduled_events_repo.mark_dispatched(db, event.id)
+                    dispatched += 1
+                elif any(err.startswith(p) for p in _SKIPPED_PREFIXES):
+                    await scheduled_events_repo.mark_skipped(
+                        db, event.id, reason=err
+                    )
+                    skipped += 1
+                else:
+                    await scheduled_events_repo.mark_failed(
+                        db, event.id, error=err
+                    )
+                    failed += 1
+                # Persist THIS event's send + mark before touching the next one
+                # so a later failure can't roll back an already-sent message.
+                await db.commit()
+            except Exception:  # noqa: BLE001 — isolate one bad row, keep ticking
+                log.exception(
+                    "scheduled event %s: dispatch/mark failed; rolling back "
+                    "this event and continuing",
+                    event.id,
+                )
+                await db.rollback()
+                errored += 1
 
-    return {"dispatched": dispatched, "failed": failed, "skipped": skipped, "examined": len(due)}
+    return {
+        "dispatched": dispatched,
+        "failed": failed,
+        "skipped": skipped,
+        "errored": errored,
+        "examined": len(due),
+    }
 
 
 async def _polling_loop(stop_event: asyncio.Event, interval: float) -> None:

@@ -1794,3 +1794,23 @@ class Household(TimestampMixin, Base):
     members: Mapped[list[Patient]] = relationship(
         back_populates="household"
     )
+
+
+class ProcessedInboundMessage(Base):
+    """Inbound-message dedupe ledger.
+
+    The orchestrator's ``/route`` endpoint claims each inbound by its provider
+    message id (the WhatsApp ``wamid``) before doing any work. Meta redelivers
+    webhooks whenever an ACK times out, so the same message can arrive more
+    than once; the second arrival finds the row already present and
+    short-circuits — a replay must not re-run the agent workflow, re-send the
+    reply, re-page clinical alerts, or re-charge LLM tokens. Append-only; old
+    rows can be pruned by age out-of-band."""
+
+    __tablename__ = "processed_inbound_messages"
+
+    message_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    patient_id: Mapped[str | None] = mapped_column(String(128))
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

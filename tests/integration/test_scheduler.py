@@ -251,6 +251,49 @@ def test_future_event_is_not_dispatched_until_due(
     assert len(pending) >= 1
 
 
+def test_tick_commits_per_event_isolating_failures(
+    scheduler_client, patient_id, monkeypatch
+):
+    """A mid-batch dispatch failure must NOT roll back marks for events
+    already dispatched in the same tick — that would re-send them next tick
+    (duplicate patient messages). Per-event commit + isolation: the failing
+    event is contained, a later event still commits durably, and the tick
+    returns (no 500) instead of aborting the whole batch."""
+    from services.scheduler import main as scheduler_main
+
+    # Seed two due triage events.
+    for _ in range(2):
+        r = scheduler_client.post(
+            "/emit-triage-alert",
+            json={
+                "patient_id": patient_id,
+                "cohort": "diabetes",
+                "severity": "high",
+                "reason": "hypo episode reported",
+            },
+        )
+        assert r.status_code == 200
+
+    calls = {"n": 0}
+
+    async def flaky_dispatch(event, **_kwargs):
+        # Succeed on the first event, raise on the last. The first event is
+        # therefore committed (dispatched) BEFORE the later one fails — proving
+        # per-event commit (the failure can't roll back the earlier send) and
+        # isolation (the raise doesn't 500 the whole tick).
+        calls["n"] += 1
+        if calls["n"] >= 2:
+            raise RuntimeError("simulated dispatch failure")
+        return None
+
+    monkeypatch.setattr(scheduler_main, "dispatch", flaky_dispatch)
+
+    tick = scheduler_client.post("/scheduler/tick").json()
+    assert tick["examined"] >= 2
+    assert tick["dispatched"] >= 1  # earlier event committed durably
+    assert tick["errored"] >= 1     # later failure isolated, no 500
+
+
 def test_tick_marks_failed_when_dispatch_errors(
     scheduler_client, patient_id, monkeypatch
 ):

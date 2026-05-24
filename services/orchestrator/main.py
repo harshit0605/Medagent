@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import audit as audit_repo
+from app.db.repositories import inbound_dedupe as inbound_dedupe_repo
 from app.db.repositories import (
     inbound_classifications as inbound_classifications_repo,
 )
@@ -582,6 +583,35 @@ async def _persist_inbox_classification(
         return None
 
 
+def _duplicate_ignored_response(
+    payload: "OrchestratorRequest", patient_id: str
+) -> dict:
+    """Response for a deduped inbound replay: an empty-body MessageOut (so the
+    gateway sends nothing) plus a ``deduped`` marker for observability. Mirrors
+    the rate-limited early-return's no-op shape."""
+    msg = MessageOut(
+        patient_id=patient_id,
+        phone=payload.message.phone,
+        body="",
+        use_template=False,
+        template_name=None,
+        quick_replies=[],
+        buttons=[],
+        list_rows=[],
+        list_button_label=None,
+        list_section_title=None,
+    )
+    return {
+        "message_out": msg.model_dump(mode="json"),
+        "intent": "general_question",
+        "risk_level": "low",
+        "flow_action": "HOLD",
+        "escalation_required": False,
+        "audit_reasons": ["duplicate_ignored"],
+        "deduped": True,
+    }
+
+
 async def _handle_rate_limited(
     db: AsyncSession,
     *,
@@ -702,6 +732,22 @@ async def route(
 
     now = datetime.now(timezone.utc)
     patient_id = payload.message.patient_id or payload.message.message_id
+
+    # Inbound dedupe — Meta redelivers webhooks on any ACK timeout, so the
+    # same wamid can hit /route more than once. Claim the message id before
+    # ANY work (even before the rate-limit gate, so a replay doesn't count
+    # against the limit); a replay finds the id already claimed and
+    # short-circuits with a no-op so we don't re-run the workflow, re-send the
+    # reply, re-page clinical alerts, or re-charge LLM tokens. Skipped when no
+    # message id is present (nothing to dedupe on).
+    msg_id = payload.message.message_id
+    if msg_id:
+        first_time = await inbound_dedupe_repo.claim(
+            db, message_id=msg_id, patient_id=patient_id
+        )
+        if not first_time:
+            log.info("inbound replay ignored (message_id=%s)", msg_id)
+            return _duplicate_ignored_response(payload, patient_id)
 
     # Per-patient inbound rate-limit gate. Fires BEFORE any LLM /
     # handler / DB-write work so a flood doesn't burn tokens or
