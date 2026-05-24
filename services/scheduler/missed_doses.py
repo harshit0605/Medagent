@@ -63,35 +63,54 @@ async def sweep_and_escalate(
         db, older_than=cutoff
     )
     marked = 0
+    errored = 0
     affected_regimens: set[int] = set()
     for event in candidates:
-        if event.regimen_id is None:
-            # Regimen was deleted; just mark missed for stat correctness.
-            await adherence_events_repo.mark_missed(db, event.id, at=when_now)
+        # Per-row SAVEPOINT so one bad row (a malformed event, a transient DB
+        # error) can't abort the whole pass and starve every other patient's
+        # missed-dose marking. The sweep is idempotent, so a skipped row is
+        # retried next pass; the savepoint rolls back only that row's work and
+        # leaves the session usable for the rest.
+        try:
+            async with db.begin_nested():
+                await adherence_events_repo.mark_missed(
+                    db, event.id, at=when_now
+                )
             marked += 1
-            continue
-        await adherence_events_repo.mark_missed(db, event.id, at=when_now)
-        marked += 1
-        affected_regimens.add(event.regimen_id)
-    if marked:
-        await db.flush()
+            if event.regimen_id is not None:
+                affected_regimens.add(event.regimen_id)
+        except Exception:  # noqa: BLE001 — isolate one row, keep sweeping
+            log.exception(
+                "missed-dose sweep: failed to mark event %s; skipping",
+                event.id,
+            )
+            errored += 1
 
     escalated = 0
     for regimen_id in affected_regimens:
-        if await _should_escalate(
-            db, regimen_id, threshold=n_threshold, up_to=when_now
-        ):
-            created = await _open_ticket_for_regimen(db, regimen_id)
+        try:
+            created = None
+            async with db.begin_nested():
+                if await _should_escalate(
+                    db, regimen_id, threshold=n_threshold, up_to=when_now
+                ):
+                    created = await _open_ticket_for_regimen(db, regimen_id)
             if created is not None:
                 escalated += 1
-    if escalated:
-        await db.flush()
+        except Exception:  # noqa: BLE001 — isolate one regimen, keep sweeping
+            log.exception(
+                "missed-dose sweep: escalation failed for regimen %s; "
+                "skipping",
+                regimen_id,
+            )
+            errored += 1
 
     return {
         "candidates_examined": len(candidates),
         "marked_missed": marked,
         "regimens_checked": len(affected_regimens),
         "escalated": escalated,
+        "errored": errored,
     }
 
 

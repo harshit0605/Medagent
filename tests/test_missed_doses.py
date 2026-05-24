@@ -28,6 +28,12 @@ class _NoopAsyncSession:
     async def flush(self):
         return None
 
+    def begin_nested(self):
+        # Mirrors AsyncSession.begin_nested(): a sync call returning an async
+        # context manager. The noop CM doesn't suppress exceptions, so the
+        # sweep's per-row try/except still sees a failing row.
+        return self
+
 
 def _adherence(*, id, status, scheduled_at, regimen_id=1, patient_id=2):
     return types.SimpleNamespace(
@@ -146,6 +152,46 @@ async def test_sweep_marks_past_due_as_missed(monkeypatch):
     assert captured["tickets"] == []
 
 
+async def test_sweep_isolates_a_failing_candidate(monkeypatch):
+    """One row that errors during marking must not abort the whole pass — the
+    other candidate is still marked (per-row savepoint isolation), and the
+    failure is counted, not raised."""
+    candidates = [
+        _adherence(
+            id=1, status=AdherenceStatus.scheduled,
+            scheduled_at=_past(120), regimen_id=1,
+        ),
+        _adherence(
+            id=2, status=AdherenceStatus.scheduled,
+            scheduled_at=_past(150), regimen_id=2,
+        ),
+    ]
+    captured = _stub_repos(
+        monkeypatch,
+        candidates=candidates,
+        recent_per_regimen={},  # nothing escalates
+        regimen=_regimen(),
+        patient=_patient(),
+    )
+
+    # Blow up marking the FIRST candidate; the second must still process.
+    async def flaky_mark(_db, _id, **kwargs):
+        if _id == 1:
+            raise RuntimeError("simulated mark failure")
+        captured["missed"].append((_id, kwargs))
+        return None
+
+    monkeypatch.setattr(
+        missed_doses.adherence_events_repo, "mark_missed", flaky_mark
+    )
+
+    out = await missed_doses.sweep_and_escalate(_NoopAsyncSession())
+    assert out["candidates_examined"] == 2
+    assert out["marked_missed"] == 1  # only the good one committed
+    assert out["errored"] == 1        # the bad row isolated, not fatal
+    assert {c[0] for c in captured["missed"]} == {2}
+
+
 async def test_sweep_escalates_after_threshold_consecutive_misses(monkeypatch):
     """With 3 consecutive misses on the same regimen, an ops_ticket fires."""
     # Three brand-new misses on regimen 1.
@@ -242,6 +288,7 @@ async def test_sweep_with_no_candidates_is_noop(monkeypatch):
         "marked_missed": 0,
         "regimens_checked": 0,
         "escalated": 0,
+        "errored": 0,
     }
     assert captured["missed"] == []
     assert captured["tickets"] == []
