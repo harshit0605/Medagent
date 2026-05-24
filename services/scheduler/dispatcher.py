@@ -24,6 +24,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AppointmentStatus, Patient, ScheduledEvent
+from app.gateway_auth import gateway_auth_headers
 from app.db.repositories import appointments as appointments_repo
 from app.db.repositories import doctors as doctors_repo
 from app.db.repositories import patient_inbound as patient_inbound_repo
@@ -1419,7 +1420,9 @@ async def dispatch(
     url = base.rstrip("/") + "/send"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(url, json=message)
+            response = await client.post(
+                url, json=message, headers=gateway_auth_headers()
+            )
             response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         # A 4xx (bad recipient, unknown template, malformed params) is a

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.gateway_auth import gateway_auth_headers
 from app.db.repositories import audit as audit_repo
 from app.db.repositories import caregivers as caregivers_repo
 from app.db.repositories import patients as patients_repo
@@ -220,7 +221,9 @@ async def _send_caregiver_consent_prompt_via_gateway(
     }
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
-            response = await client.post(f"{base}/send", json=payload)
+            response = await client.post(
+                f"{base}/send", json=payload, headers=gateway_auth_headers()
+            )
             response.raise_for_status()
             data = response.json()
             return data.get("wamid")

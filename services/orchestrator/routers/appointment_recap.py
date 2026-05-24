@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AppointmentRecap, RecapStatus
+from app.gateway_auth import gateway_auth_headers
 from app.db.repositories import appointment_recaps as appointment_recaps_repo
 from app.db.repositories import appointments as appointments_repo
 from app.db.repositories import caregivers as caregivers_repo
@@ -355,7 +356,9 @@ async def _send_recap_via_gateway(
 
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
-            response = await client.post(f"{base}/send", json=payload)
+            response = await client.post(
+                f"{base}/send", json=payload, headers=gateway_auth_headers()
+            )
             response.raise_for_status()
             data = response.json()
             return data.get("wamid")

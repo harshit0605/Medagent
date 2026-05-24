@@ -27,6 +27,7 @@
  */
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:8001";
+const GATEWAY_API_KEY = process.env.GATEWAY_API_KEY;
 
 type MetaStatus = {
   id: string;
@@ -83,9 +84,13 @@ async function postOne(status: MetaStatus): Promise<void> {
     error_title: error?.title ?? null,
     raw: status,
   };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (GATEWAY_API_KEY) headers["x-api-key"] = GATEWAY_API_KEY;
   const res = await fetch(`${GATEWAY_URL}/internal/whatsapp/status`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     cache: "no-store",
   });

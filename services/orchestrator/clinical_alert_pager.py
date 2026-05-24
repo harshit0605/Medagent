@@ -39,6 +39,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Appointment, AppointmentStatus, ClinicalAlert, Doctor
+from app.gateway_auth import gateway_auth_headers
 from app.db.repositories import (
     clinical_alerts as clinical_alerts_repo,
     doctors as doctors_repo,
@@ -172,7 +173,9 @@ async def _post_to_gateway(
     }
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(url, json=message)
+            response = await client.post(
+                url, json=message, headers=gateway_auth_headers()
+            )
             response.raise_for_status()
     except httpx.HTTPError as exc:
         log.warning(

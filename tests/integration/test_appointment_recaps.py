@@ -194,7 +194,7 @@ async def test_recap_v2_template_injects_quick_reply_buttons(
         async def __aexit__(self, *_a):
             return None
 
-        async def post(self, url: str, json: dict):  # noqa: A002
+        async def post(self, url: str, json: dict, headers=None):  # noqa: A002
             captured.update(json)
             captured["_wamid"] = f"wamid.fake.{uuid.uuid4().hex[:8]}"
             return FakeResponse()
@@ -256,7 +256,7 @@ async def test_recap_v1_template_skips_buttons(
         async def __aexit__(self, *_a):
             return None
 
-        async def post(self, url: str, json: dict):  # noqa: A002
+        async def post(self, url: str, json: dict, headers=None):  # noqa: A002
             captured.update(json)
             return FakeResponse()
 

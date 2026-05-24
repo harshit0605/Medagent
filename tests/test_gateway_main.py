@@ -8,6 +8,9 @@ tests/integration/test_persistence.py against a real database.
 
 from __future__ import annotations
 
+import pytest
+from fastapi.testclient import TestClient
+
 from services.whatsapp_gateway import main as gateway_main
 from services.whatsapp_gateway import meta
 
@@ -15,6 +18,48 @@ from services.whatsapp_gateway import meta
 def test_gateway_app_routes_registered():
     paths = {route.path for route in gateway_main.app.routes}
     assert {"/health", "/webhook", "/send", "/logs"}.issubset(paths)
+
+
+# ---- shared-secret auth ----------------------------------------------------
+
+
+def test_check_auth_config_fails_closed_when_unset(monkeypatch):
+    monkeypatch.setattr(gateway_main, "_GATEWAY_API_KEY", "")
+    monkeypatch.setattr(gateway_main, "_ALLOW_UNAUTHENTICATED", False)
+    with pytest.raises(RuntimeError):
+        gateway_main._check_auth_config()
+
+
+def test_check_auth_config_allows_explicit_optin(monkeypatch):
+    monkeypatch.setattr(gateway_main, "_GATEWAY_API_KEY", "")
+    monkeypatch.setattr(gateway_main, "_ALLOW_UNAUTHENTICATED", True)
+    gateway_main._check_auth_config()  # must not raise
+
+
+def test_check_auth_config_allows_when_key_set(monkeypatch):
+    monkeypatch.setattr(gateway_main, "_GATEWAY_API_KEY", "k")
+    monkeypatch.setattr(gateway_main, "_ALLOW_UNAUTHENTICATED", False)
+    gateway_main._check_auth_config()  # must not raise
+
+
+def test_send_requires_key_when_enabled(monkeypatch):
+    """With GATEWAY_API_KEY set, every non-/health request needs the key. The
+    middleware runs before routing, so these paths never touch the DB."""
+    monkeypatch.setattr(gateway_main, "_GATEWAY_API_KEY", "test-secret")
+    with TestClient(gateway_main.app) as client:
+        # Missing key → 401 (rejected before the handler/DB).
+        assert client.post("/send", json={}).status_code == 401
+        assert client.get("/__nope__").status_code == 401
+        # Wrong key → 401.
+        assert client.get(
+            "/__nope__", headers={"x-api-key": "nope"}
+        ).status_code == 401
+        # Valid key passes auth (nonexistent route → 404, not 401).
+        assert client.get(
+            "/__nope__", headers={"x-api-key": "test-secret"}
+        ).status_code == 404
+        # Health is always exempt.
+        assert client.get("/health").status_code == 200
 
 
 def test_interactive_buttons_body_shape_matches_meta_spec():

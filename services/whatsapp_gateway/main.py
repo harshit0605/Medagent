@@ -14,11 +14,15 @@ through Meta. Set ``WHATSAPP_INTERNAL_WEBHOOK_ENABLED=0`` to disable it.
 
 from __future__ import annotations
 
+import hmac
+import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from datetime import datetime as _dt
@@ -36,7 +40,67 @@ from services.whatsapp_gateway.meta import (
 )
 from shared.contracts.models import MessageIn, MessageOut
 
-app = FastAPI(title="whatsapp_gateway")
+log = logging.getLogger(__name__)
+
+# Shared-secret API key. When ``GATEWAY_API_KEY`` is set, every request except
+# the health probe must present a matching ``X-API-Key`` (or
+# ``Authorization: Bearer``) header — the orchestrator / scheduler attach it
+# via app.gateway_auth. When UNSET the gateway refuses to boot unless
+# ``ALLOW_UNAUTHENTICATED=1`` is set (dev / tests opt in explicitly), so an
+# unauthenticated message-sending surface is never the silent default.
+_GATEWAY_API_KEY = os.getenv("GATEWAY_API_KEY", "")
+_ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "") == "1"
+_AUTH_EXEMPT_EXACT: frozenset[str] = frozenset({"/health"})
+
+
+def _check_auth_config() -> None:
+    """Startup fail-closed guard. ``/send`` can deliver WhatsApp messages as
+    us; running it open is only acceptable in local dev / tests, which must opt
+    in via ``ALLOW_UNAUTHENTICATED=1``."""
+    if not _GATEWAY_API_KEY and not _ALLOW_UNAUTHENTICATED:
+        raise RuntimeError(
+            "GATEWAY_API_KEY is unset and ALLOW_UNAUTHENTICATED != '1'. "
+            "Refusing to start an unauthenticated WhatsApp gateway (its /send "
+            "delivers messages as us). Set GATEWAY_API_KEY in production, or "
+            "ALLOW_UNAUTHENTICATED=1 for local dev / tests."
+        )
+    if not _GATEWAY_API_KEY:
+        log.warning(
+            "GATEWAY_API_KEY is unset — the WhatsApp gateway is "
+            "UNAUTHENTICATED (ALLOW_UNAUTHENTICATED=1). Never use this in "
+            "production."
+        )
+
+
+def _extract_api_key(request: Request) -> str | None:
+    key = request.headers.get("x-api-key")
+    if key:
+        return key
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _check_auth_config()
+    yield
+
+
+app = FastAPI(title="whatsapp_gateway", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def _api_key_auth(request: Request, call_next):
+    if _GATEWAY_API_KEY and request.url.path not in _AUTH_EXEMPT_EXACT:
+        provided = _extract_api_key(request)
+        if not (provided and hmac.compare_digest(provided, _GATEWAY_API_KEY)):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "invalid or missing API key"},
+            )
+    return await call_next(request)
 
 DEFAULT_LOG_LIMIT = 1000
 

@@ -18,9 +18,11 @@ import "server-only";
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL ?? "http://localhost:8002";
 const SCHEDULER_URL = process.env.SCHEDULER_URL ?? "http://localhost:8003";
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:8001";
-// Shared-secret sent to the orchestrator when it enforces auth
-// (ORCHESTRATOR_API_KEY set on both sides). Omitted when unset.
+// Shared secrets sent to each backend when it enforces auth (the matching
+// *_API_KEY set on both sides). Omitted when unset. The gateway's /send + /logs
+// are protected separately from the orchestrator.
 const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY;
+const GATEWAY_API_KEY = process.env.GATEWAY_API_KEY;
 
 type FetchOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -45,9 +47,11 @@ async function call<T>(base: string, path: string, opts: FetchOptions = {}): Pro
   }
   const headers: Record<string, string> = {};
   if (opts.body) headers["content-type"] = "application/json";
-  // Authenticate orchestrator calls when a shared secret is configured.
+  // Authenticate calls when the target backend's shared secret is configured.
   if (ORCHESTRATOR_API_KEY && base === ORCHESTRATOR_URL) {
     headers["x-api-key"] = ORCHESTRATOR_API_KEY;
+  } else if (GATEWAY_API_KEY && base === GATEWAY_URL) {
+    headers["x-api-key"] = GATEWAY_API_KEY;
   }
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const init: RequestInit = {

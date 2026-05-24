@@ -65,9 +65,10 @@ class _MockAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
 
-    async def post(self, url, json):
+    async def post(self, url, json, headers=None):
         self._captured["url"] = url
         self._captured["json"] = json
+        self._captured["headers"] = headers
         return self._post(url, json)
 
 
