@@ -94,7 +94,7 @@ async def test_reply_in_csw_succeeds_and_audits(
     """Happy path: in-CSW patient + monkeypatched gateway send →
     200 with wamid, outbound logged in message_log, audit row written
     tagged ``doctor_reply``."""
-    from services.orchestrator import main as orchestrator_main
+    from services.orchestrator.routers import doctor_replies as doctor_replies_router
 
     captured_payloads: list[dict] = []
 
@@ -103,7 +103,7 @@ async def test_reply_in_csw_succeeds_and_audits(
         return f"wamid.fake.reply.{uuid.uuid4().hex[:8]}"
 
     monkeypatch.setattr(
-        orchestrator_main, "_send_doctor_reply_via_gateway", fake_send
+        doctor_replies_router, "_send_doctor_reply_via_gateway", fake_send
     )
 
     patient_id, patient_phone = await _seed_patient(in_csw=True)
@@ -198,13 +198,13 @@ async def test_reply_502_when_gateway_send_fails(
     """Gateway returns no wamid → endpoint must surface a 502 so the
     UI can show a clear failure rather than persisting a successful-
     looking audit row."""
-    from services.orchestrator import main as orchestrator_main
+    from services.orchestrator.routers import doctor_replies as doctor_replies_router
 
     async def fake_send(*, patient_phone: str, body: str) -> str | None:
         return None
 
     monkeypatch.setattr(
-        orchestrator_main, "_send_doctor_reply_via_gateway", fake_send
+        doctor_replies_router, "_send_doctor_reply_via_gateway", fake_send
     )
 
     patient_id, _ = await _seed_patient(in_csw=True)
