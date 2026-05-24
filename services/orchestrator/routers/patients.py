@@ -170,6 +170,10 @@ async def list_patients(
 
     rows = await patients_repo.list_all(db, limit=limit)
     today = datetime.now(timezone.utc).date()
+    # Open-ticket counts for ALL patients in one grouped query (keyed by the
+    # phone the ticket carries) — previously this re-fetched every open ticket
+    # org-wide inside the per-patient loop (an N+1 full-scan storm).
+    open_ticket_counts = await ops_tickets_repo.open_counts_by_patient(db)
     out: list[PatientSummaryDTO] = []
     for p in rows:
         regimens = await regimens_repo.list_for_patient(db, p.id, active_on=today)
@@ -178,13 +182,6 @@ async def list_patients(
         )
         # Only confirmed upcoming — cancelled / no_show shouldn't inflate the count.
         appts = [a for a in appts_raw if a.status == AppointmentStatus.confirmed]
-        # Open ops tickets for this patient (by phone — that's the ticket's
-        # patient_id field).
-        open_tickets = [
-            t
-            for t in await ops_tickets_repo.list_tickets(db, status="open")
-            if t.patient_id == p.phone
-        ]
         out.append(
             PatientSummaryDTO(
                 id=p.id,
@@ -195,7 +192,7 @@ async def list_patients(
                 cohort_fall_risk=p.cohort_fall_risk,
                 active_regimen_count=len(regimens),
                 upcoming_appointment_count=len(appts),
-                open_ticket_count=len(open_tickets),
+                open_ticket_count=open_ticket_counts.get(p.phone, 0),
                 created_at=p.created_at,
             )
         )

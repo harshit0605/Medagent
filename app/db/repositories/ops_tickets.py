@@ -66,6 +66,24 @@ async def list_tickets(session: AsyncSession, *, status: str | None = None) -> l
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def open_counts_by_patient(
+    session: AsyncSession,
+) -> dict[str, int]:
+    """Return ``{patient_id: open_ticket_count}`` in a single grouped query.
+
+    The patients-list page needs an open-ticket count per row; doing it with
+    a per-patient fetch (or, worse, re-fetching ALL open tickets inside the
+    loop) is an N+1 / full-scan storm. One GROUP BY serves the whole page.
+    Keyed by ``patient_id`` (the phone string the ticket carries)."""
+    stmt = (
+        select(OpsTicket.patient_id, func.count())
+        .where(OpsTicket.status == OpsTicketStatus.open)
+        .group_by(OpsTicket.patient_id)
+    )
+    rows = (await session.execute(stmt)).all()
+    return {pid: count for pid, count in rows}
+
+
 async def list_with_filters(
     session: AsyncSession,
     *,

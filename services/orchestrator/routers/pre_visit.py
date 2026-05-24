@@ -176,13 +176,16 @@ async def get_pre_visit_summary(
         for a in upcoming_appts
         if a.status == AppointmentStatus.confirmed
     ]
-    open_tickets_count_rows = (
+    # Patient's ops tickets — fetched ONCE (by phone, the id ops_tickets
+    # uses) and reused for both the summary count here and the detailed
+    # open-tickets list below.
+    all_tickets = (
         await ops_tickets_repo.list_for_patient(db, patient.phone)
         if patient.phone
         else []
     )
     open_ticket_count = sum(
-        1 for t in open_tickets_count_rows if t.status.value == "open"
+        1 for t in all_tickets if t.status.value == "open"
     )
     patient_summary_dto = PatientSummaryDTO(
         id=patient.id,
@@ -212,12 +215,8 @@ async def get_pre_visit_summary(
         if lab.status.value in ("due", "booked")
     ]
 
-    # Open ops tickets — by phone (the patient_id used in ops_tickets).
-    open_tickets_rows = (
-        await ops_tickets_repo.list_for_patient(db, patient.phone)
-        if patient.phone
-        else []
-    )
+    # Open ops tickets — reuse the rows already fetched for the count above.
+    open_tickets_rows = all_tickets
     now = datetime.now(timezone.utc)
     open_tickets: list[PreVisitTicketDTO] = []
     for t in open_tickets_rows:

@@ -446,6 +446,18 @@ class AppointmentFollowup(TimestampMixin, Base):
 
 class OpsTicket(TimestampMixin, Base):
     __tablename__ = "ops_tickets"
+    __table_args__ = (
+        # Patient-scoped lookups (find_open_for_patient_category on every
+        # escalation; the patient-detail + patients-list counts). See
+        # migration 20260524_0045. (The (status, priority) queue index lives
+        # in migration 0002 and isn't mirrored here.)
+        Index(
+            "ix_ops_tickets_patient_category_status",
+            "patient_id",
+            "category",
+            "status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # patient_id is a free-form runtime identifier (no FK to patients yet).

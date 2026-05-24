@@ -502,3 +502,22 @@ async def test_sweep_round_trip_marks_overdue_ticket(patient_id):
     async with SessionLocal() as db:
         again = await ops_tickets_repo.get(db, ticket_id)
         assert again.sla_breached_at is not None
+
+
+async def test_open_counts_by_patient_counts_only_open(patient_id):
+    """The grouped open-ticket count (used by the patients-list page) must
+    count only OPEN tickets and key them by the patient phone string."""
+    await _create(patient_id, category="triage")
+    await _create(patient_id, category="refill_help")
+    resolved_id = await _create(patient_id, category="lab_help")
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        await ops_tickets_repo.resolve(db, resolved_id, actor="ops")
+        await db.commit()
+
+    async with SessionLocal() as db:
+        counts = await ops_tickets_repo.open_counts_by_patient(db)
+
+    # Two open, one resolved → 2; the resolved one is excluded.
+    assert counts.get(patient_id) == 2
