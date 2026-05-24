@@ -21,7 +21,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -663,8 +663,9 @@ async def erase_patient_endpoint(
 @router.get("/patients/{patient_id}/export")
 async def export_patient_data(
     patient_id: int,
-    actor: str = "ops",
     window_days: int = 365,
+    actor: str = "ops",
+    x_ops_actor: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """DSAR right-of-access endpoint. Returns a single JSON document
@@ -677,11 +678,17 @@ async def export_patient_data(
     can answer "who exported this patient's data and when" if a
     regulator ever asks.
 
+    Operator attribution: prefer the ``X-Ops-Actor`` request header (set by
+    the ops console from the operator's session) over the legacy ``actor``
+    query param — a PHI export's operator identity should not sit in the URL,
+    where it leaks into access logs / proxies / browser history. The query
+    param is kept as a backward-compatible fallback.
+
+    NOTE: under the current shared-API-key model the actor is caller-asserted
+    (there is no per-operator identity to bind it to); strong attribution
+    requires an authentication layer. Tracked as a follow-up.
+
     Parameters:
-        actor: who's running the export. Goes into the audit row.
-            Defaults to ``"ops"`` for ops-console-driven exports;
-            an automated re-import or scheduled job should pass
-            its own identifier.
         window_days: how far back time-bounded sections (adherence,
             recaps, appointments) reach. Defaults to 365 — most
             retention policies cover at least a year, and capping
@@ -694,7 +701,8 @@ async def export_patient_data(
             status_code=400,
             detail="window_days must be between 1 and 3650",
         )
-    if not actor or len(actor) > 128:
+    resolved_actor = (x_ops_actor or actor or "").strip()
+    if not resolved_actor or len(resolved_actor) > 128:
         raise HTTPException(
             status_code=400, detail="actor required (max 128 chars)"
         )
@@ -702,7 +710,7 @@ async def export_patient_data(
     document = await patient_export.build_patient_export(
         db,
         patient_id=patient_id,
-        actor=actor,
+        actor=resolved_actor,
         window_days=window_days,
     )
     if document is None:

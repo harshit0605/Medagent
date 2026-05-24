@@ -187,6 +187,25 @@ def test_export_writes_audit_record(orchestrator_client):
     assert audit.details.get("actor") == "ops_alice"
 
 
+def test_export_prefers_x_ops_actor_header(orchestrator_client):
+    """The X-Ops-Actor header (set by the ops console from the operator
+    session) takes precedence over the legacy ?actor= query param so the
+    operator identity stays out of the URL / access logs."""
+    import asyncio
+
+    pid, _phone = asyncio.get_event_loop().run_until_complete(
+        _create_patient_with_data()
+    )
+
+    r = orchestrator_client.get(
+        f"/patients/{pid}/export",
+        params={"actor": "from_query"},
+        headers={"X-Ops-Actor": "from_header"},
+    )
+    assert r.status_code == 200
+    assert r.json()["exported_by"] == "from_header"
+
+
 def test_export_404_for_unknown_patient(orchestrator_client):
     r = orchestrator_client.get(
         "/patients/999999999/export", params={"actor": "ops"}

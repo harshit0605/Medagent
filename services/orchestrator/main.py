@@ -142,12 +142,9 @@ async def _make_compiled_graph() -> dict[str, Any] | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not os.getenv("ORCHESTRATOR_API_KEY", ""):
-        log.warning(
-            "ORCHESTRATOR_API_KEY is unset — the orchestrator HTTP API is "
-            "UNAUTHENTICATED. Set it (and the ops console's matching env) "
-            "before exposing this service."
-        )
+    # Fail-closed: refuse to boot an unauthenticated orchestrator (it serves
+    # PHI) unless the operator explicitly opted in via ALLOW_UNAUTHENTICATED=1.
+    _check_auth_config()
     state = await _make_compiled_graph()
     if state is not None:
         app.state.graph = state["graph"]
@@ -170,22 +167,45 @@ app = FastAPI(title="orchestrator", lifespan=lifespan)
 # ``ORCHESTRATOR_API_KEY`` is set, every request must present a matching
 # ``X-API-Key`` (or ``Authorization: Bearer``) header — the Next.js ops
 # console / ingress send it via their backend client. When UNSET, auth is
-# disabled (a loud startup warning fires) so local dev + tests keep working.
-# Health checks and the Google-Calendar webhook (which carries its own
-# channel-token secret) are exempt.
+# disabled — but the service refuses to boot in that state unless
+# ``ALLOW_UNAUTHENTICATED=1`` is set (local dev / tests opt in explicitly).
 _ORCH_API_KEY = os.getenv("ORCHESTRATOR_API_KEY", "")
-_AUTH_EXEMPT_PREFIXES: tuple[str, ...] = (
-    "/health",
-    "/webhooks/",
-    "/docs",
-    "/redoc",
-    "/openapi.json",
-)
+_ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "") == "1"
+
+# Exempt from API-key auth: the health probe (exact match) and the
+# Google-Calendar push webhook (prefix — it carries its own channel-token
+# secret, verified inside the handler). ``/docs`` / ``/redoc`` /
+# ``/openapi.json`` are deliberately NOT exempt: the schema enumerates every
+# PHI endpoint and must require the key when auth is enabled.
+_AUTH_EXEMPT_EXACT: frozenset[str] = frozenset({"/health"})
+_AUTH_EXEMPT_PREFIXES: tuple[str, ...] = ("/webhooks/",)
+
+
+def _check_auth_config() -> None:
+    """Startup fail-closed guard. The orchestrator HTTP surface exposes PHI
+    (patient detail, DSAR export, erasure, broadcast). Running it without an
+    API key is only acceptable in local dev / tests, which must opt in
+    explicitly. Anywhere else, a missing ``ORCHESTRATOR_API_KEY`` is a
+    misconfiguration we refuse to boot with rather than silently serving an
+    open API."""
+    if not _ORCH_API_KEY and not _ALLOW_UNAUTHENTICATED:
+        raise RuntimeError(
+            "ORCHESTRATOR_API_KEY is unset and ALLOW_UNAUTHENTICATED != '1'. "
+            "Refusing to start an unauthenticated orchestrator (it serves "
+            "PHI). Set ORCHESTRATOR_API_KEY in production, or set "
+            "ALLOW_UNAUTHENTICATED=1 for local dev / tests."
+        )
+    if not _ORCH_API_KEY:
+        log.warning(
+            "ORCHESTRATOR_API_KEY is unset — the orchestrator HTTP API is "
+            "UNAUTHENTICATED (ALLOW_UNAUTHENTICATED=1). Never use this in "
+            "production."
+        )
 
 
 def _auth_exempt(path: str) -> bool:
-    return any(
-        path == p or path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES
+    return path in _AUTH_EXEMPT_EXACT or any(
+        path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES
     )
 
 

@@ -46,6 +46,12 @@ os.environ["LLM_ENABLED"] = "0"
 # compiled graph re-enable it via fixtures.
 os.environ["LANGGRAPH_ENABLED"] = "0"
 
+# The orchestrator fails closed when ORCHESTRATOR_API_KEY is unset (it serves
+# PHI). The test suite runs without a key and exercises both the auth-enabled
+# (monkeypatched) and auth-disabled middleware paths, so opt into the
+# unauthenticated mode explicitly here. ``setdefault`` so a real key still wins.
+os.environ.setdefault("ALLOW_UNAUTHENTICATED", "1")
+
 # Reset any cached LLM singleton that may already be enabled if a prior
 # in-process import loaded the module before this conftest ran.
 try:

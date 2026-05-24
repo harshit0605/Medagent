@@ -64,6 +64,43 @@ def test_auth_disabled_when_key_unset(client, monkeypatch):
     assert resp.status_code != 401
 
 
+def test_openapi_requires_key_when_enabled(client, monkeypatch):
+    # The schema enumerates every PHI endpoint — it must NOT be exempt.
+    monkeypatch.setattr(orch_main, "_ORCH_API_KEY", "test-secret")
+    assert client.get("/openapi.json").status_code == 401
+    assert client.get("/docs").status_code == 401
+
+
+def test_health_exempt_not_overmatched(client, monkeypatch):
+    # /health is exact-exempt; a lookalike prefix must still require the key
+    # (previously a broad startswith("/health") would have let it through).
+    monkeypatch.setattr(orch_main, "_ORCH_API_KEY", "test-secret")
+    assert client.get("/health").status_code == 200
+    assert client.get("/healthz").status_code == 401
+
+
+# ---- fail-closed startup guard ---------------------------------------------
+
+
+def test_check_auth_config_fails_closed_when_unset(monkeypatch):
+    monkeypatch.setattr(orch_main, "_ORCH_API_KEY", "")
+    monkeypatch.setattr(orch_main, "_ALLOW_UNAUTHENTICATED", False)
+    with pytest.raises(RuntimeError):
+        orch_main._check_auth_config()
+
+
+def test_check_auth_config_allows_explicit_optin(monkeypatch):
+    monkeypatch.setattr(orch_main, "_ORCH_API_KEY", "")
+    monkeypatch.setattr(orch_main, "_ALLOW_UNAUTHENTICATED", True)
+    orch_main._check_auth_config()  # must not raise
+
+
+def test_check_auth_config_allows_when_key_set(monkeypatch):
+    monkeypatch.setattr(orch_main, "_ORCH_API_KEY", "a-key")
+    monkeypatch.setattr(orch_main, "_ALLOW_UNAUTHENTICATED", False)
+    orch_main._check_auth_config()  # must not raise
+
+
 # ---- calendar webhook token hardening --------------------------------------
 
 
