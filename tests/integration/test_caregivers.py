@@ -284,7 +284,7 @@ async def test_recap_send_cc_confirmed_caregiver(
     caregiver receives a copy. The patient send and each caregiver send
     are independent gateway calls — we monkeypatch the gateway helper to
     capture all phones called and assert the caregiver got cc'd."""
-    from services.orchestrator import main as orchestrator_main
+    from services.orchestrator.routers import appointment_recap as appointment_recap_router
 
     captured_phones: list[str] = []
 
@@ -293,7 +293,7 @@ async def test_recap_send_cc_confirmed_caregiver(
         return f"wamid.fake.{uuid.uuid4().hex[:8]}"
 
     monkeypatch.setattr(
-        orchestrator_main, "_send_recap_via_gateway", fake_send
+        appointment_recap_router, "_send_recap_via_gateway", fake_send
     )
 
     # Seed: patient + appointment + caregiver (confirmed, notify=true).
@@ -526,7 +526,7 @@ async def test_recap_send_skips_pending_caregiver(
     """Pending consent → no caregiver send. The patient send still
     happens, the recap still marks ``sent``, but the caregiver phone
     is NOT in the captured set."""
-    from services.orchestrator import main as orchestrator_main
+    from services.orchestrator.routers import appointment_recap as appointment_recap_router
 
     captured_phones: list[str] = []
 
@@ -535,7 +535,7 @@ async def test_recap_send_skips_pending_caregiver(
         return f"wamid.fake.{uuid.uuid4().hex[:8]}"
 
     monkeypatch.setattr(
-        orchestrator_main, "_send_recap_via_gateway", fake_send
+        appointment_recap_router, "_send_recap_via_gateway", fake_send
     )
 
     SessionLocal = get_sessionmaker()

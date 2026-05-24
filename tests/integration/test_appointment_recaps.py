@@ -166,7 +166,9 @@ async def test_recap_v2_template_injects_quick_reply_buttons(
     recap_handler with the recap_id intact. v1 (no buttons) was tested
     earlier in this file via the lock-after-send path; this test covers
     the v2 swap explicitly without depending on the default."""
-    from services.orchestrator import main as orchestrator_main
+    from services.orchestrator.routers import (
+        appointment_recap as orchestrator_main,
+    )
 
     captured: dict = {}
 
@@ -234,7 +236,9 @@ async def test_recap_v1_template_skips_buttons(
     """Mirror of the v2 test for the v1 template — must NOT attach
     buttons because v1 has no QUICK_REPLY components defined at Meta
     and Meta would reject the send."""
-    from services.orchestrator import main as orchestrator_main
+    from services.orchestrator.routers import (
+        appointment_recap as orchestrator_main,
+    )
 
     captured: dict = {}
 
@@ -284,7 +288,9 @@ async def test_recap_v1_template_skips_buttons(
 
 async def test_recap_locks_after_send(orchestrator_client, monkeypatch):
     """Once sent, PUT should 409 — drafts can only be edited before send."""
-    from services.orchestrator import main as orchestrator_main
+    from services.orchestrator.routers import (
+        appointment_recap as orchestrator_main,
+    )
 
     appointment_id = await _seed_appointment()
 
