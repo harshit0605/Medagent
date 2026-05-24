@@ -7,6 +7,11 @@ receipt URL / partner order id), post_op_episodes (notes), asthma_trigger_logs
 ``cohort_asthma`` / ``cohort_post_op`` / ``cohort_pregnancy`` flags and the
 ``household_id`` membership link also weren't being cleared.
 
+Later additions also carry clinical PHI that erasure must scrub:
+appointment_recaps (doctor_notes / generated_text / structured_payload),
+lab_followups (free-form notes), and prescriptions (the uploaded document
+URL + the parse that embeds the patient's printed name + the verifier).
+
 These tests seed each surface with PII, run the erasure flow, and confirm the
 PII is scrubbed while anonymized clinical/structural data is retained.
 
@@ -17,18 +22,26 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
 from app.db.models import (
+    Appointment,
+    AppointmentRecap,
+    AppointmentStatus,
     AsthmaTriggerLog,
+    Doctor,
+    DoctorOAuthStatus,
     Household,
+    LabFollowup,
     Order,
     Patient,
     PostOpEpisode,
     Pregnancy,
+    Prescription,
+    RecapStatus,
 )
 from app.db.session import get_sessionmaker
 from services.orchestrator import patient_erasure
@@ -103,6 +116,64 @@ async def _seed_patient_with_v3_pii() -> tuple[int, str, int]:
                 patient_id=p.id,
                 trigger_text="dust while cleaning the house",
                 source="patient_self_report",
+            )
+        )
+
+        # Prescription — uploaded-document URL + the parse (which embeds the
+        # patient's printed name) + the verifier.
+        db.add(
+            Prescription(
+                patient_id=p.id,
+                source_upload_url="https://files.example/rx/patient-scan.pdf",
+                parsed_payload={
+                    "patient_name": f"V3 Erase {suffix}",
+                    "meds": ["Metformin 500mg"],
+                },
+                verified_by="dr_smith",
+            )
+        )
+        # Lab follow-up with free-form notes.
+        db.add(
+            LabFollowup(
+                patient_id=p.id,
+                test_name="HbA1c",
+                notes="patient mentioned fasting was hard this week",
+            )
+        )
+        # Appointment recap — doctor-authored clinical prose. Needs a doctor +
+        # appointment to hang off (both FK NOT NULL).
+        doctor = Doctor(
+            name=f"Dr. V3 {suffix}",
+            email=f"dr-v3-{suffix}@example.com",
+            timezone="UTC",
+            calendar_id="primary",
+            oauth_status=DoctorOAuthStatus.connected,
+        )
+        db.add(doctor)
+        await db.flush()
+        when = datetime(2026, 5, 1, tzinfo=timezone.utc)
+        appointment = Appointment(
+            patient_id=p.id,
+            doctor_id=doctor.id,
+            scheduled_for=when,
+            end_at=when + timedelta(minutes=30),
+            status=AppointmentStatus.completed,
+            source="test",
+        )
+        db.add(appointment)
+        await db.flush()
+        db.add(
+            AppointmentRecap(
+                appointment_id=appointment.id,
+                patient_id=p.id,
+                doctor_id=doctor.id,
+                doctor_notes="patient reports dizziness on the new dose",
+                structured_payload={
+                    "red_flags": ["chest pain"],
+                    "meds_added": [{"name": "Vitamin D3"}],
+                },
+                generated_text=f"Hi V3 Erase {suffix}, here is your visit summary…",
+                status=RecapStatus.sent,
             )
         )
         await db.commit()
@@ -222,3 +293,66 @@ async def test_erasure_clears_new_cohort_flags():
     assert patient.cohort_asthma is False
     assert patient.cohort_post_op is False
     assert patient.cohort_pregnancy is False
+
+
+async def test_erasure_scrubs_prescription_pii():
+    pid, _phone, _hh = await _seed_patient_with_v3_pii()
+    await _erase(pid)
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(Prescription).where(Prescription.patient_id == pid)
+                )
+            ).scalars().all()
+        )
+    assert rows
+    for row in rows:
+        # Uploaded-document URL is NOT NULL → overwritten with the token.
+        assert row.source_upload_url == "[erased]"
+        # The parse embedded the patient's printed name → cleared.
+        assert row.parsed_payload == {}
+        assert row.verified_by is None
+
+
+async def test_erasure_scrubs_lab_followup_notes():
+    pid, _phone, _hh = await _seed_patient_with_v3_pii()
+    await _erase(pid)
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(LabFollowup).where(LabFollowup.patient_id == pid)
+                )
+            ).scalars().all()
+        )
+    assert rows
+    for row in rows:
+        assert row.notes is None
+        # Generic test name retained as anonymized clinical data.
+        assert row.test_name == "HbA1c"
+
+
+async def test_erasure_scrubs_appointment_recap_pii():
+    pid, _phone, _hh = await _seed_patient_with_v3_pii()
+    await _erase(pid)
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(AppointmentRecap).where(
+                        AppointmentRecap.patient_id == pid
+                    )
+                )
+            ).scalars().all()
+        )
+    assert rows
+    for row in rows:
+        assert row.doctor_notes is None
+        assert row.generated_text is None
+        assert row.structured_payload == {}
+        # Skeleton (status / sent marker) retained for the audit trail.
+        assert row.status is not None

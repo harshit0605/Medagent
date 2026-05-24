@@ -40,6 +40,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    AppointmentRecap,
     AsthmaTriggerLog,
     BroadcastSend,
     CarePlanGoal,
@@ -47,6 +48,7 @@ from app.db.models import (
     ClinicalAlert,
     Household,
     InboundClassification,
+    LabFollowup,
     MessageLog,
     MetricObservation,
     OpsTicket,
@@ -54,6 +56,7 @@ from app.db.models import (
     Patient,
     PostOpEpisode,
     Pregnancy,
+    Prescription,
     VisitBrief,
 )
 from app.db.repositories import audit as audit_repo
@@ -121,7 +124,14 @@ async def erase_patient_data(
         14. Households: rotate primary_caregiver_phone if it was the
             patient's number (also drop the patient's household_id in
             step 1).
-        15. Audit record: write the erasure event itself.
+        15. Appointment recaps: clear doctor_notes + generated_text
+            + structured_payload — doctor-authored, LLM-polished
+            clinical prose sent to the patient.
+        16. Lab follow-ups: clear the free-form notes column.
+        17. Prescriptions: overwrite source_upload_url (the uploaded
+            prescription document) + parsed_payload (the doc parse,
+            which embeds the patient's printed name) + verified_by.
+        18. Audit record: write the erasure event itself.
 
     The audit row's ``patient_id`` carries the ANONYMIZED phone
     so a regulator can trace the erasure forward (anonymized id
@@ -336,6 +346,47 @@ async def erase_patient_data(
         update(Household)
         .where(Household.primary_caregiver_phone == original_phone)
         .values(primary_caregiver_phone=new_phone)
+    )
+
+    # 15. Appointment recaps — the doctor's free-form ``doctor_notes``,
+    #     the LLM-polished ``generated_text`` actually sent to the
+    #     patient, and the doctor-filled ``structured_payload`` (meds /
+    #     labs / red-flags JSON) are all clinical prose about this
+    #     patient. Wipe them; keep status / sent_at / authored_by so the
+    #     "a recap was sent on date X by doctor Y" skeleton survives.
+    await db.execute(
+        update(AppointmentRecap)
+        .where(AppointmentRecap.patient_id == patient.id)
+        .values(
+            doctor_notes=None,
+            generated_text=None,
+            structured_payload={},
+        )
+    )
+
+    # 16. Lab follow-ups — the free-form ``notes`` column may carry the
+    #     patient's words / clinician shorthand. Clear it; keep
+    #     test_name + status as anonymized clinical data (like regimens).
+    await db.execute(
+        update(LabFollowup)
+        .where(LabFollowup.patient_id == patient.id)
+        .values(notes=None)
+    )
+
+    # 17. Prescriptions — ``source_upload_url`` points at the uploaded
+    #     prescription document and ``parsed_payload`` is the parse of
+    #     that document (routinely embeds the patient's printed name +
+    #     prescriber). Overwrite both (source_upload_url is NOT NULL, so
+    #     use the token) plus ``verified_by``. Keep the row + its
+    #     regimens FK skeleton.
+    await db.execute(
+        update(Prescription)
+        .where(Prescription.patient_id == patient.id)
+        .values(
+            source_upload_url=_ERASED_TOKEN,
+            parsed_payload={},
+            verified_by=None,
+        )
     )
 
     await db.flush()
