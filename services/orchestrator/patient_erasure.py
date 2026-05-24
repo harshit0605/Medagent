@@ -40,15 +40,20 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    AsthmaTriggerLog,
     BroadcastSend,
     CarePlanGoal,
     Caregiver,
     ClinicalAlert,
+    Household,
     InboundClassification,
     MessageLog,
     MetricObservation,
     OpsTicket,
+    Order,
     Patient,
+    PostOpEpisode,
+    Pregnancy,
     VisitBrief,
 )
 from app.db.repositories import audit as audit_repo
@@ -108,7 +113,15 @@ async def erase_patient_data(
            ``patient_id``.
         9. Metric observations + care plan goals: clear ``notes``
            free-form fields.
-        10. Audit record: write the erasure event itself.
+        10. Pregnancies: clear notes + ended_reason.
+        11. Orders: clear notes, substitution_note, partner_deeplink
+            (embeds phone), receipt_url, partner_order_id.
+        12. Post-op episodes: clear notes + ended_reason.
+        13. Asthma trigger logs: overwrite trigger_text.
+        14. Households: rotate primary_caregiver_phone if it was the
+            patient's number (also drop the patient's household_id in
+            step 1).
+        15. Audit record: write the erasure event itself.
 
     The audit row's ``patient_id`` carries the ANONYMIZED phone
     so a regulator can trace the erasure forward (anonymized id
@@ -141,6 +154,14 @@ async def erase_patient_data(
     patient.cohort_diabetes = False
     patient.cohort_cardiac = False
     patient.cohort_fall_risk = False
+    patient.cohort_asthma = False
+    patient.cohort_post_op = False
+    patient.cohort_pregnancy = False
+    # Drop household membership — the household may contain other patients, so
+    # we remove this patient's link rather than touching shared household rows
+    # (the household's own caregiver phone is rotated in step 14 if it was
+    # this patient's number).
+    patient.household_id = None
     patient.bot_paused_at = when
     patient.bot_paused_reason = "patient_erasure"
     patient.bot_paused_by = actor
@@ -265,6 +286,56 @@ async def erase_patient_data(
         update(CarePlanGoal)
         .where(CarePlanGoal.patient_id == patient.id)
         .values(notes=None)
+    )
+
+    # 10. Pregnancies (P4) — free-form ``notes`` + ``ended_reason`` may carry
+    #     the patient's words. Wipe them; keep lmp_date/edd/status as
+    #     now-anonymized clinical data (consistent with regimens/observations).
+    await db.execute(
+        update(Pregnancy)
+        .where(Pregnancy.patient_id == patient.id)
+        .values(notes=None, ended_reason=None)
+    )
+
+    # 11. Orders (P6) — wipe free-form notes + the partner deep-link (which can
+    #     embed the patient's phone) + the receipt URL + the external partner
+    #     order id (a back-link to the partner's identifiable record). Keep
+    #     medication_name/dose/status as clinical data (like regimens).
+    await db.execute(
+        update(Order)
+        .where(Order.patient_id == patient.id)
+        .values(
+            notes=None,
+            substitution_note=None,
+            partner_deeplink=None,
+            receipt_url=None,
+            partner_order_id=None,
+        )
+    )
+
+    # 12. Post-op episodes (P-13) — wipe free-form notes + ended_reason; keep
+    #     procedure_name/surgery_date/status as anonymized clinical data.
+    await db.execute(
+        update(PostOpEpisode)
+        .where(PostOpEpisode.patient_id == patient.id)
+        .values(notes=None, ended_reason=None)
+    )
+
+    # 13. Asthma trigger diary (P5) — ``trigger_text`` is the patient's own
+    #     words. Overwrite it irreversibly.
+    await db.execute(
+        update(AsthmaTriggerLog)
+        .where(AsthmaTriggerLog.patient_id == patient.id)
+        .values(trigger_text=_ERASED_TOKEN)
+    )
+
+    # 14. Households (P-13) — the household is shared across members, so we
+    #     don't delete it. But if THIS patient's phone was the household's
+    #     primary caregiver contact, rotate it to the anonymized phone.
+    await db.execute(
+        update(Household)
+        .where(Household.primary_caregiver_phone == original_phone)
+        .values(primary_caregiver_phone=new_phone)
     )
 
     await db.flush()
