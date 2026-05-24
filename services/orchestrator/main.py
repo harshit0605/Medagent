@@ -20,11 +20,9 @@ from app.db.models import (
     AppointmentStatus,
     Doctor,
     DoctorOAuthStatus,
-    LabFollowup,
     OpsTicket,
     Prescription,
     RecapStatus,
-    Regimen,
 )
 from app.db.repositories import adherence_events as adherence_events_repo
 from app.db.repositories import appointment_recaps as appointment_recaps_repo
@@ -69,6 +67,12 @@ from services.orchestrator.routers import orders as orders_router
 from services.orchestrator.routers import post_op as post_op_router
 from services.orchestrator.routers import pregnancy as pregnancy_router
 from services.orchestrator.routers import visit_briefs as visit_briefs_router
+from services.orchestrator.routers._dtos import (
+    LabFollowupDTO,
+    RegimenDTO,
+    _lab_to_dto,
+    _regimen_to_dto,
+)
 from services.scheduler import dose_reminders
 from services.scheduler import lab_followups as lab_followups_scheduler
 from services.orchestrator.agent_workflow import (
@@ -3959,49 +3963,6 @@ class RefillEventDTO(BaseModel):
     label: str         # human-friendly outcome
 
 
-class LabFollowupDTO(BaseModel):
-    id: int
-    patient_id: int
-    test_name: str
-    status: str
-    due_by: date | None
-    notes: str | None
-    booked_at: datetime | None
-    completed_at: datetime | None
-    reviewed_at: datetime | None
-    days_until_due: int | None
-    is_overdue: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-def _lab_to_dto(row: LabFollowup) -> LabFollowupDTO:
-    today = datetime.now(timezone.utc).date()
-    days_until_due: int | None = None
-    if row.due_by is not None:
-        days_until_due = (row.due_by - today).days
-    is_overdue = (
-        row.due_by is not None
-        and row.due_by < today
-        and row.status.value in {"due", "booked"}
-    )
-    return LabFollowupDTO(
-        id=row.id,
-        patient_id=row.patient_id,
-        test_name=row.test_name,
-        status=row.status.value,
-        due_by=row.due_by,
-        notes=row.notes,
-        booked_at=row.booked_at,
-        completed_at=row.completed_at,
-        reviewed_at=row.reviewed_at,
-        days_until_due=days_until_due,
-        is_overdue=is_overdue,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
 class SideEffectReportDTO(BaseModel):
     """One side_effect_report ticket the patient has filed. Surfaced
     on the patient detail page so a doctor can spot patterns across
@@ -4575,48 +4536,6 @@ class RegimenCreateRequest(BaseModel):
     strict_timing: bool = False
     supply_days_initial: int | None = Field(default=None, ge=1, le=365)
     supply_started_on: date | None = None
-
-
-class RegimenDTO(BaseModel):
-    id: int
-    patient_id: int
-    medication_name: str
-    dose: str
-    schedule: dict[str, Any]
-    starts_on: date | None
-    ends_on: date | None
-    strict_timing: bool
-    supply_days_initial: int | None
-    supply_started_on: date | None
-    days_of_supply_remaining: int | None  # computed; null when supply not tracked
-    created_at: datetime
-    updated_at: datetime
-
-
-def _days_of_supply_remaining(row: Regimen) -> int | None:
-    if row.supply_days_initial is None or row.supply_started_on is None:
-        return None
-    today = datetime.now(timezone.utc).date()
-    elapsed = (today - row.supply_started_on).days
-    return max(0, row.supply_days_initial - elapsed)
-
-
-def _regimen_to_dto(row: Regimen) -> RegimenDTO:
-    return RegimenDTO(
-        id=row.id,
-        patient_id=row.patient_id,
-        medication_name=row.medication_name,
-        dose=row.dose,
-        schedule=row.schedule or {},
-        starts_on=row.starts_on,
-        ends_on=row.ends_on,
-        strict_timing=row.strict_timing,
-        supply_days_initial=row.supply_days_initial,
-        supply_started_on=row.supply_started_on,
-        days_of_supply_remaining=_days_of_supply_remaining(row),
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
 
 
 @app.post("/patients/{patient_id}/regimens", response_model=RegimenDTO)
