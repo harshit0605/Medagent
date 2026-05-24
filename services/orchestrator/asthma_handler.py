@@ -275,7 +275,8 @@ async def handle_trigger_log(
         f"Noted your asthma trigger: {trigger}. I've added it to your trigger "
         "diary — spotting patterns helps your care team adjust your plan."
     )
-    log.info("asthma trigger logged for %s: %s", patient_phone, trigger)
+    # Don't log the trigger free-text (clinical content) at INFO.
+    log.info("asthma trigger logged for %s", patient_phone)
     return {"response_body": body, "audit_reasons": ["asthma_trigger_log"]}
 
 

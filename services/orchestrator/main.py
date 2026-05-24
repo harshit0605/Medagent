@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 import time
@@ -11,6 +12,7 @@ from typing import Any, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -144,6 +146,12 @@ async def _make_compiled_graph() -> dict[str, Any] | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not os.getenv("ORCHESTRATOR_API_KEY", ""):
+        log.warning(
+            "ORCHESTRATOR_API_KEY is unset — the orchestrator HTTP API is "
+            "UNAUTHENTICATED. Set it (and the ops console's matching env) "
+            "before exposing this service."
+        )
     state = await _make_compiled_graph()
     if state is not None:
         app.state.graph = state["graph"]
@@ -160,6 +168,51 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="orchestrator", lifespan=lifespan)
+
+
+# Shared-secret API key for the orchestrator's HTTP surface. When
+# ``ORCHESTRATOR_API_KEY`` is set, every request must present a matching
+# ``X-API-Key`` (or ``Authorization: Bearer``) header — the Next.js ops
+# console / ingress send it via their backend client. When UNSET, auth is
+# disabled (a loud startup warning fires) so local dev + tests keep working.
+# Health checks and the Google-Calendar webhook (which carries its own
+# channel-token secret) are exempt.
+_ORCH_API_KEY = os.getenv("ORCHESTRATOR_API_KEY", "")
+_AUTH_EXEMPT_PREFIXES: tuple[str, ...] = (
+    "/health",
+    "/webhooks/",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
+
+
+def _auth_exempt(path: str) -> bool:
+    return any(
+        path == p or path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES
+    )
+
+
+def _extract_api_key(request: Request) -> str | None:
+    key = request.headers.get("x-api-key")
+    if key:
+        return key
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return None
+
+
+@app.middleware("http")
+async def _api_key_auth(request: Request, call_next):
+    if _ORCH_API_KEY and not _auth_exempt(request.url.path):
+        provided = _extract_api_key(request)
+        if not (provided and hmac.compare_digest(provided, _ORCH_API_KEY)):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "invalid or missing API key"},
+            )
+    return await call_next(request)
 
 
 def _get_graph(request: Request) -> Any | None:
@@ -6457,18 +6510,35 @@ async def google_calendar_webhook(
     if state == "sync":
         return {"status": "ok", "handshake": True}
 
-    if not (token and token.isdigit()):
+    # Verify the channel token. The doctor_id alone is guessable, so when
+    # ``GCAL_WEBHOOK_TOKEN`` is configured we require the watch to be
+    # registered with a ``{doctor_id}:{secret}`` token and constant-time
+    # compare the secret. When unset we fall back to the legacy
+    # numeric-doctor-id token (so existing watches keep working) — a warning
+    # for that is emitted at startup-config time.
+    webhook_secret = os.getenv("GCAL_WEBHOOK_TOKEN", "")
+    doctor_id: int | None = None
+    if webhook_secret:
+        parts = (token or "").split(":", 1)
+        if (
+            len(parts) == 2
+            and parts[0].isdigit()
+            and hmac.compare_digest(parts[1], webhook_secret)
+        ):
+            doctor_id = int(parts[0])
+    elif token and token.isdigit():
+        doctor_id = int(token)
+
+    if doctor_id is None:
         log.info(
-            "calendar webhook: missing/invalid doctor token "
+            "calendar webhook: missing/invalid channel token "
             "(channel=%s, state=%s)",
             channel_id,
             state,
         )
-        return {"status": "ok", "synced": False, "reason": "no_doctor_token"}
+        return {"status": "ok", "synced": False, "reason": "bad_token"}
 
     from services.scheduler import calendar_sync_sweep
-
-    doctor_id = int(token)
     try:
         result = await calendar_sync_sweep.reconcile_doctor(
             db, doctor_id=doctor_id
