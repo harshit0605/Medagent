@@ -22,14 +22,12 @@
 
 import { useState, useTransition } from "react";
 
-import { orchestrator } from "@/lib/backend";
+import { erasePatientAction } from "../_actions";
 
 type Props = {
   patientId: number;
   patientFullName: string;
 };
-
-const DEFAULT_ACTOR = "ops_console";
 
 export function ErasePatientButton({ patientId, patientFullName }: Props) {
   const [open, setOpen] = useState(false);
@@ -51,11 +49,7 @@ export function ErasePatientButton({ patientId, patientFullName }: Props) {
     setError(null);
     startTransition(async () => {
       try {
-        await orchestrator.erasePatient(patientId, {
-          actor: DEFAULT_ACTOR,
-          reason: reason.trim(),
-          confirm: true,
-        });
+        await erasePatientAction(patientId, reason.trim());
         // Hard reload — the page renders against the freshly
         // anonymized data without us having to thread state.
         window.location.reload();

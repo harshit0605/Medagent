@@ -15,14 +15,15 @@
 
 import { useState, useTransition } from "react";
 
-import { orchestrator } from "@/lib/backend";
+import {
+  clearInboxFeedbackAction,
+  setInboxFeedbackAction,
+} from "../_actions";
 
 type Props = {
   classificationId: number;
   initialRating: number | null;
 };
-
-const DEFAULT_ACTOR = "ops_console";
 
 export function FeedbackCell({ classificationId, initialRating }: Props) {
   const [rating, setRating] = useState<number | null>(initialRating);
@@ -37,10 +38,7 @@ export function FeedbackCell({ classificationId, initialRating }: Props) {
     setRating(next);
     startTransition(async () => {
       try {
-        await orchestrator.setInboxFeedback(classificationId, {
-          rating: next,
-          actor: DEFAULT_ACTOR,
-        });
+        await setInboxFeedbackAction(classificationId, next);
       } catch (err) {
         setRating(previous);
         setError(err instanceof Error ? err.message : String(err));
@@ -54,7 +52,7 @@ export function FeedbackCell({ classificationId, initialRating }: Props) {
     setRating(null);
     startTransition(async () => {
       try {
-        await orchestrator.clearInboxFeedback(classificationId);
+        await clearInboxFeedbackAction(classificationId);
       } catch (err) {
         setRating(previous);
         setError(err instanceof Error ? err.message : String(err));

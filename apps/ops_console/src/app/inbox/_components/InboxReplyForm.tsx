@@ -16,9 +16,9 @@
 
 import { useState, useTransition } from "react";
 
-import { orchestrator, type DraftReply } from "@/lib/backend";
+import type { DraftReply } from "@/lib/backend";
 
-import { sendDoctorReplyAction } from "../_actions";
+import { draftInboxReplyAction, sendDoctorReplyAction } from "../_actions";
 
 type Props = {
   classificationId: number;
@@ -46,7 +46,7 @@ export function InboxReplyForm({
     setDraftError(null);
     startDraft(async () => {
       try {
-        const result = await orchestrator.draftInboxReply(classificationId);
+        const result = await draftInboxReplyAction(classificationId);
         setDraftMeta(result);
         // Always replace the textarea content — the operator
         // is asking for a fresh draft, so stomping their

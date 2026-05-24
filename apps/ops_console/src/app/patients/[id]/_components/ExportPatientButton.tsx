@@ -18,15 +18,12 @@
 
 import { useState, useTransition } from "react";
 
-import { orchestrator } from "@/lib/backend";
+import { exportPatientAction } from "../_actions";
 
 type Props = {
   patientId: number;
   patientFullName: string;
 };
-
-const DEFAULT_ACTOR = "ops_console";
-const DEFAULT_WINDOW_DAYS = 365;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -50,10 +47,7 @@ export function ExportPatientButton({ patientId, patientFullName }: Props) {
     setError(null);
     startTransition(async () => {
       try {
-        const document = await orchestrator.exportPatient(patientId, {
-          actor: DEFAULT_ACTOR,
-          window_days: DEFAULT_WINDOW_DAYS,
-        });
+        const document = await exportPatientAction(patientId);
         const json = JSON.stringify(document, null, 2);
         const blob = new Blob([json], { type: "application/json" });
         const url = URL.createObjectURL(blob);

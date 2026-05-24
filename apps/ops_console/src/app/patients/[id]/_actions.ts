@@ -253,3 +253,34 @@ export async function sendDoctorReplyAction(formData: FormData) {
   revalidatePath(`/patients/${patientId}`);
   revalidatePath("/inbox");
 }
+
+// DSAR right-of-access export. Returns the assembled JSON document so the
+// client component can build the downloadable Blob — the network call +
+// API key stay on the server (the client never imports the backend client).
+export async function exportPatientAction(
+  patientId: number,
+): Promise<Record<string, unknown>> {
+  return orchestrator.exportPatient(patientId, {
+    actor: "ops_console",
+    window_days: 365,
+  });
+}
+
+// Right-of-erasure. Irreversible; the client component already gates this
+// behind a typed-name + reason + acknowledgement confirm panel.
+export async function erasePatientAction(
+  patientId: number,
+  reason: string,
+): Promise<void> {
+  const trimmed = reason.trim();
+  if (!trimmed) {
+    throw new Error("reason is required");
+  }
+  await orchestrator.erasePatient(patientId, {
+    actor: "ops_console",
+    reason: trimmed,
+    confirm: true,
+  });
+  revalidatePath(`/patients/${patientId}`);
+  revalidatePath("/");
+}

@@ -2,10 +2,18 @@
  * Server-side HTTP client for the Medagent backends.
  *
  * All callers must run on the Next.js server (Server Components, Server
- * Actions, Route Handlers) — these helpers read env vars and do not include
- * any browser-side fallback. fetch is `cache: "no-store"` so the dashboard
- * always reflects live state.
+ * Actions, Route Handlers) — these helpers read env vars (incl. the
+ * ORCHESTRATOR_API_KEY secret) and do not include any browser-side fallback.
+ * fetch is `cache: "no-store"` so the dashboard always reflects live state.
+ *
+ * The `server-only` import is a build-time tripwire: if a Client Component
+ * ever imports a runtime value from this module, the build fails. Client
+ * components must go through a Server Action instead (see each route's
+ * `_actions.ts`). Type-only imports (`import type { ... }`) are erased by the
+ * compiler and remain safe.
  */
+
+import "server-only";
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL ?? "http://localhost:8002";
 const SCHEDULER_URL = process.env.SCHEDULER_URL ?? "http://localhost:8003";
