@@ -24,6 +24,17 @@ def _force_real_mode(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _no_backoff_sleep(monkeypatch):
+    """No-op the retry backoff so retry tests run instantly."""
+
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(meta_module.asyncio, "sleep", _no_sleep)
+    yield
+
+
 class _MockResponse:
     def __init__(self, payload: dict | None = None, status_code: int = 200) -> None:
         self._payload = payload or {"messages": [{"id": "wamid.AAA"}]}
@@ -161,3 +172,53 @@ async def test_normalize_to_strips_leading_plus():
     assert meta_module._normalize_to("+16315551234") == "16315551234"
     assert meta_module._normalize_to("16315551234") == "16315551234"
     assert meta_module._normalize_to(" +16315551234 ") == "16315551234"
+
+
+# ---- transient-failure retry/backoff --------------------------------------
+
+
+async def test_transient_5xx_is_retried_then_succeeds(monkeypatch):
+    """A 5xx is transient — _post_to_meta retries and succeeds on a later
+    attempt instead of surfacing the blip as a failed send."""
+    calls = {"n": 0}
+
+    def post(url, json, headers):  # noqa: A002
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return _MockResponse(status_code=503)
+        return _MockResponse()  # success on the 3rd attempt
+
+    _patch_async_client(monkeypatch, post=post)
+    result = await meta_module.send_freeform(to="15551234567", text="hi")
+    assert result.accepted is True
+    assert calls["n"] == 3
+
+
+async def test_permanent_4xx_is_not_retried(monkeypatch):
+    """A 4xx is permanent — retrying won't help, so it fails on the first
+    attempt without burning extra calls."""
+    calls = {"n": 0}
+
+    def post(url, json, headers):  # noqa: A002
+        calls["n"] += 1
+        return _MockResponse(status_code=400)
+
+    _patch_async_client(monkeypatch, post=post)
+    result = await meta_module.send_freeform(to="15551234567", text="hi")
+    assert result.accepted is False
+    assert calls["n"] == 1
+
+
+async def test_transient_failure_exhausts_attempts(monkeypatch):
+    """A sustained transient failure exhausts the bounded attempts and then
+    surfaces as a failed send (the scheduler's retry/DLQ takes over)."""
+    calls = {"n": 0}
+
+    def post(url, json, headers):  # noqa: A002
+        calls["n"] += 1
+        return _MockResponse(status_code=503)
+
+    _patch_async_client(monkeypatch, post=post)
+    result = await meta_module.send_freeform(to="15551234567", text="hi")
+    assert result.accepted is False
+    assert calls["n"] == meta_module._MAX_SEND_ATTEMPTS

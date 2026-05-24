@@ -14,14 +14,23 @@ Meta Cloud API reference:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import random
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 log = logging.getLogger(__name__)
+
+# Bounded retry for TRANSIENT Meta-send failures (network blips, 429, 5xx).
+# Permanent 4xx (bad recipient, invalid template) are NOT retried. This is a
+# short in-call retry for momentary faults; sustained outages still surface as
+# an error so the scheduler's own retry/DLQ machinery takes over.
+_MAX_SEND_ATTEMPTS = 3
+_SEND_BACKOFF_BASE_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -144,6 +153,21 @@ def _build_template_body(
     return payload
 
 
+def _is_retryable_send_error(exc: httpx.HTTPError) -> bool:
+    """Whether a Meta-send failure is transient and worth retrying.
+
+    Retryable: network/timeout transport errors, HTTP 429 (rate limited), and
+    5xx (server-side). A 4xx (bad request, invalid recipient/template) is
+    permanent — retrying would just hammer Meta and delay the inevitable
+    error, so we surface it immediately.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status == 429 or 500 <= status < 600
+    # ConnectError / ReadTimeout / WriteError / PoolTimeout, etc.
+    return isinstance(exc, httpx.TransportError)
+
+
 async def _post_to_meta(body: dict[str, Any], *, timeout: float = 10.0) -> dict[str, Any]:
     token = os.getenv("WHATSAPP_ACCESS_TOKEN")
     if not token:
@@ -153,10 +177,35 @@ async def _post_to_meta(body: dict[str, Any], *, timeout: float = 10.0) -> dict[
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, json=body, headers=headers)
-        response.raise_for_status()
-        return response.json()
+    for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, json=body, headers=headers)
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPError as exc:
+            # Give up immediately on the last attempt or a permanent error;
+            # the caller turns the raised error into a failed MetaSendResult.
+            if attempt >= _MAX_SEND_ATTEMPTS or not _is_retryable_send_error(
+                exc
+            ):
+                raise
+            delay = (
+                _SEND_BACKOFF_BASE_SECONDS
+                * (2 ** (attempt - 1))
+                * random.uniform(0.8, 1.2)
+            )
+            log.warning(
+                "Meta send attempt %d/%d failed (%s); retrying in %.2fs",
+                attempt,
+                _MAX_SEND_ATTEMPTS,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+    # Unreachable — the loop either returns or raises — but satisfies type
+    # checkers that the function always returns or raises.
+    raise RuntimeError("unreachable: meta send retry loop exited")
 
 
 def _wamid_from(response: dict[str, Any] | None) -> str | None:
