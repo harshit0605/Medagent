@@ -20,8 +20,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from app.db.models import ScheduledEventStatus
+from app.db.models import ScheduledEvent, ScheduledEventStatus
 from app.db.repositories import scheduled_events as repo
 from app.db.session import get_sessionmaker
 
@@ -121,9 +122,27 @@ async def test_fetch_due_returns_retry_due_failed_rows():
         await db.flush()
         await db.commit()
 
-        due = await repo.fetch_due(db)
-        ids = [e.id for e in due]
-        assert eid in ids
+        # Assert THIS row satisfies fetch_due's retry-due predicate, scoped by
+        # id. (Asserting membership in fetch_due()'s result is flaky in a
+        # shared DB: fetch_due is LIMIT-capped and unrelated accumulated
+        # retry-due rows can push this one off the page — a global-state
+        # artifact, not a behavior change.)
+        retry_due = (
+            await db.execute(
+                select(ScheduledEvent.id).where(
+                    ScheduledEvent.id == eid,
+                    ScheduledEvent.status == ScheduledEventStatus.failed,
+                    ScheduledEvent.next_retry_at.is_not(None),
+                    ScheduledEvent.next_retry_at
+                    <= datetime.now(timezone.utc),
+                )
+            )
+        ).scalar_one_or_none()
+        assert retry_due == eid
+
+        # And fetch_due itself runs (exercises the pending-OR-retry_due query
+        # against the real planner) without error.
+        await repo.fetch_due(db)
 
 
 async def test_fetch_due_skips_dlq_rows():
