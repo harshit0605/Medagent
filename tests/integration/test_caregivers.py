@@ -377,7 +377,6 @@ async def test_consent_prompt_sends_to_pending_caregiver(
     invokes the gateway with the consent template + dynamic button
     payloads, returns the wamid, and writes a ``caregiver_consent_prompt_sent``
     audit row."""
-    from services.orchestrator import main as orchestrator_main
 
     captured: dict = {}
 
@@ -385,8 +384,10 @@ async def test_consent_prompt_sends_to_pending_caregiver(
         captured.update(kwargs)
         return f"wamid.fake.consent.{uuid.uuid4().hex[:8]}"
 
+    from services.orchestrator.routers import caregivers as caregivers_router
+
     monkeypatch.setattr(
-        orchestrator_main,
+        caregivers_router,
         "_send_caregiver_consent_prompt_via_gateway",
         fake_send,
     )
@@ -480,13 +481,14 @@ async def test_consent_prompt_502_when_gateway_send_fails(
 ):
     """Gateway helper returns None → endpoint surfaces a 502 instead
     of writing a successful-looking audit row."""
-    from services.orchestrator import main as orchestrator_main
 
     async def fake_send(**kwargs):
         return None
 
+    from services.orchestrator.routers import caregivers as caregivers_router
+
     monkeypatch.setattr(
-        orchestrator_main,
+        caregivers_router,
         "_send_caregiver_consent_prompt_via_gateway",
         fake_send,
     )
