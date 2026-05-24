@@ -132,13 +132,24 @@ async def sweep_weekly_trends(
         summary = summarize_observations(observations)
         if not summary:
             continue
-        await scheduled_events_repo.enqueue(
+        # Idempotent enqueue keyed per patient per day. ``_recently_pushed``
+        # above is the primary window guard, but two overlapping sweep runs
+        # could both pass it and then double-enqueue (TOCTOU); the idempotency
+        # key closes that race at the DB level (ON CONFLICT DO NOTHING).
+        created = await scheduled_events_repo.enqueue_idempotent(
             db,
             event_type=WEEKLY_TREND_EVENT_TYPE,
             patient_id=patient.phone,
             payload={"patient_db_id": pid, "summary": summary},
+            idempotency_key=(
+                f"weekly_trend:{patient.phone}:{when.date().isoformat()}"
+            ),
             scheduled_for=when,
         )
+        if created is None:
+            # Already pushed today (concurrent sweep won the race) — deduped.
+            skipped_recent += 1
+            continue
         pushed += 1
 
     log.info(

@@ -34,6 +34,7 @@ from app.db.models import (
     ScheduledEvent,
     ScheduledEventStatus,
 )
+from app.db.repositories import scheduled_events as scheduled_events_repo
 from app.db.session import get_sessionmaker
 from services.scheduler import recap_sweeps
 from services.scheduler.dispatcher import (
@@ -232,6 +233,43 @@ async def test_sweep_unacked_recaps_idempotent():
     assert first["enqueued"] == 1
     assert second["enqueued"] == 0
     assert second["skipped"] >= 1
+
+
+async def test_sweep_unacked_recaps_key_dedupes_past_status_check():
+    """The per-recap idempotency key closes the TOCTOU race the status
+    pre-check can't: even after a prior ack-nudge leaves the
+    pending/dispatched set (so _has_existing_ack_nudge is False), a second
+    enqueue with the same key is rejected — no duplicate nudge."""
+    patient, doctor = await _seed_patient_doctor()
+    appt_id = await _seed_completed_appointment(
+        patient.id, doctor.id, ended_hours_ago=72
+    )
+    recap_id = await _seed_sent_recap(
+        appt_id, patient.id, doctor.id, sent_hours_ago=48
+    )
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        # Pre-create the ack-nudge with the sweep's key, then FAIL it so the
+        # status pre-check (pending/dispatched only) no longer sees it.
+        ev = await scheduled_events_repo.enqueue_idempotent(
+            db,
+            event_type=recap_sweeps.RECAP_ACK_NUDGE_EVENT_TYPE,
+            patient_id=patient.phone,
+            payload={"recap_id": recap_id, "appointment_id": appt_id},
+            idempotency_key=f"recap_ack_nudge:{recap_id}",
+        )
+        assert ev is not None
+        await scheduled_events_repo.mark_failed(db, ev.id, error="boom")
+        await db.commit()
+
+        result = await recap_sweeps.sweep_unacked_recaps(db)
+        await db.commit()
+
+    # Status check is bypassed (failed != pending/dispatched), but the key
+    # blocks the duplicate enqueue.
+    assert result["enqueued"] == 0
+    assert result["skipped"] >= 1
 
 
 async def test_sweep_unacked_recaps_skips_acked():

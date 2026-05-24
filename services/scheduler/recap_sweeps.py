@@ -224,7 +224,11 @@ async def sweep_unacked_recaps(
         if already:
             skipped += 1
             continue
-        await scheduled_events_repo.enqueue(
+        # Idempotent enqueue keyed per recap. ``_has_existing_ack_nudge``
+        # above is the primary skip, but two overlapping sweep runs could both
+        # pass it and then double-enqueue (TOCTOU); the idempotency key closes
+        # that race at the DB level (ON CONFLICT DO NOTHING).
+        created = await scheduled_events_repo.enqueue_idempotent(
             db,
             event_type=RECAP_ACK_NUDGE_EVENT_TYPE,
             patient_id=patient.phone,
@@ -232,8 +236,14 @@ async def sweep_unacked_recaps(
                 "recap_id": recap.id,
                 "appointment_id": recap.appointment_id,
             },
+            idempotency_key=f"recap_ack_nudge:{recap.id}",
             scheduled_for=when_now,
         )
+        if created is None:
+            # A nudge for this recap already exists (concurrent sweep won the
+            # race, or a prior run created it) — deduped.
+            skipped += 1
+            continue
         enqueued += 1
     if enqueued:
         await db.flush()
