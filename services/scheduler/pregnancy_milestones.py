@@ -148,7 +148,7 @@ async def materialize_for_pregnancy(
         target_utc = _target_utc(target_date, tz)
         if target_utc <= when_now:
             continue
-        row = await scheduled_events_repo.enqueue(
+        row = await scheduled_events_repo.enqueue_idempotent(
             db,
             event_type=PREGNANCY_MILESTONE_EVENT_TYPE,
             patient_id=patient_phone,
@@ -162,9 +162,11 @@ async def materialize_for_pregnancy(
                 "ga_week": milestone.week,
                 "target_date_iso": target_date.isoformat(),
             },
+            idempotency_key=f"preg_milestone:{pregnancy.id}:{milestone.key}",
             scheduled_for=target_utc,
         )
-        out.append(row)
+        if row is not None:
+            out.append(row)
 
     # --- weekly check-ins (rolling horizon) ---------------------------------
     for week, target_date in preg.next_weekly_checkins(
@@ -175,7 +177,7 @@ async def materialize_for_pregnancy(
         target_utc = _target_utc(target_date, tz)
         if target_utc <= when_now:
             continue
-        row = await scheduled_events_repo.enqueue(
+        row = await scheduled_events_repo.enqueue_idempotent(
             db,
             event_type=PREGNANCY_WEEKLY_EVENT_TYPE,
             patient_id=patient_phone,
@@ -186,9 +188,11 @@ async def materialize_for_pregnancy(
                 "focus": preg.weekly_focus(week),
                 "target_date_iso": target_date.isoformat(),
             },
+            idempotency_key=f"preg_weekly:{pregnancy.id}:{week}",
             scheduled_for=target_utc,
         )
-        out.append(row)
+        if row is not None:
+            out.append(row)
 
     return out
 

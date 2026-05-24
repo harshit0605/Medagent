@@ -98,7 +98,7 @@ async def materialize_for_episode(
         target_utc = _target_utc(target_date, tz)
         if target_utc <= when_now:
             continue
-        row = await scheduled_events_repo.enqueue(
+        row = await scheduled_events_repo.enqueue_idempotent(
             db,
             event_type=POST_OP_CHECK_EVENT_TYPE,
             patient_id=patient_phone,
@@ -112,9 +112,11 @@ async def materialize_for_episode(
                 "procedure_name": episode.procedure_name,
                 "target_date_iso": target_date.isoformat(),
             },
+            idempotency_key=f"post_op_check:{episode.id}:{check.key}",
             scheduled_for=target_utc,
         )
-        out.append(row)
+        if row is not None:
+            out.append(row)
     return out
 
 

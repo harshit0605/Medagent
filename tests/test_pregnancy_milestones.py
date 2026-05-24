@@ -21,20 +21,25 @@ _LMP = date(2026, 1, 1)
 
 @pytest.fixture()
 def capture_enqueue(monkeypatch):
-    """Patch enqueue to record calls and return a lightweight event row."""
+    """Patch the idempotent enqueue to record calls + return a lightweight row."""
     calls: list[SimpleNamespace] = []
 
-    async def fake_enqueue(_db, *, event_type, patient_id, payload, scheduled_for):
+    async def fake_enqueue(
+        _db, *, event_type, patient_id, payload, idempotency_key, scheduled_for
+    ):
         row = SimpleNamespace(
             event_type=event_type,
             patient_id=patient_id,
             payload=payload,
+            idempotency_key=idempotency_key,
             scheduled_for=scheduled_for,
         )
         calls.append(row)
         return row
 
-    monkeypatch.setattr(pm.scheduled_events_repo, "enqueue", fake_enqueue)
+    monkeypatch.setattr(
+        pm.scheduled_events_repo, "enqueue_idempotent", fake_enqueue
+    )
     return calls
 
 

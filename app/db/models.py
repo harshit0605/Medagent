@@ -1609,11 +1609,22 @@ class ScheduledEvent(Base):
         Index("ix_scheduled_events_patient", "patient_id"),
         # Materializer dedupe: WHERE event_type IN (...) AND status='pending'.
         Index("ix_scheduled_events_type_status", "event_type", "status"),
+        # Race-safe one-shot materialization: unique only where a key is set
+        # (recurring dose/refill events leave it NULL).
+        Index(
+            "uq_scheduled_events_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     patient_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Deterministic dedupe key for one-shot materialized reminders (pregnancy /
+    # post-op). NULL for recurring events. See ``enqueue_idempotent``.
+    idempotency_key: Mapped[str | None] = mapped_column(String(255))
     scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[ScheduledEventStatus] = mapped_column(

@@ -90,6 +90,53 @@ async def enqueue(
     return row
 
 
+async def enqueue_idempotent(
+    session: AsyncSession,
+    *,
+    event_type: str,
+    patient_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str,
+    scheduled_for: datetime | None = None,
+) -> ScheduledEvent | None:
+    """Enqueue a one-shot event keyed by ``idempotency_key``, race-safe.
+
+    Uses INSERT ... ON CONFLICT DO NOTHING against the partial unique index on
+    ``idempotency_key`` so a concurrent (or repeat) materialization of the same
+    reminder inserts at most once. Returns the new row, or ``None`` when the
+    key already existed (i.e. another tick/instance won the race or it was
+    already materialized).
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    when = scheduled_for or datetime.now(timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    stmt = (
+        pg_insert(ScheduledEvent)
+        .values(
+            event_type=event_type,
+            patient_id=patient_id,
+            payload=payload,
+            scheduled_for=when,
+            status=ScheduledEventStatus.pending,
+            idempotency_key=idempotency_key,
+        )
+        # index_where must match the PARTIAL unique index's predicate so
+        # Postgres can infer it for the ON CONFLICT arbiter.
+        .on_conflict_do_nothing(
+            index_elements=["idempotency_key"],
+            index_where=ScheduledEvent.idempotency_key.isnot(None),
+        )
+        .returning(ScheduledEvent.id)
+    )
+    new_id = (await session.execute(stmt)).scalar_one_or_none()
+    if new_id is None:
+        return None  # conflict — already materialized
+    await session.flush()
+    return await session.get(ScheduledEvent, new_id)
+
+
 async def fetch_due(
     session: AsyncSession, *, now: datetime | None = None, limit: int = 50
 ) -> list[ScheduledEvent]:
