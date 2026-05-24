@@ -51,7 +51,7 @@ def test_change_without_doctor_token_is_noop(orchestrator_client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["synced"] is False
-    assert body["reason"] == "no_doctor_token"
+    assert body["reason"] == "bad_token"
 
 
 def test_change_triggers_push_sync(orchestrator_client, monkeypatch):
