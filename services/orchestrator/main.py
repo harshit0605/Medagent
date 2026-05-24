@@ -73,9 +73,12 @@ from services.orchestrator.routers import regimen as regimen_router
 from services.orchestrator.routers import side_effect_analytics as side_effect_analytics_router
 from services.orchestrator.routers import visit_briefs as visit_briefs_router
 from services.orchestrator.routers._dtos import (
+    AdherenceSummaryDTO,
     AppointmentDTO,
     LabFollowupDTO,
+    PatientSummaryDTO,
     RegimenDTO,
+    _adherence_summary,
     _lab_to_dto,
     _regimen_to_dto,
 )
@@ -1663,35 +1666,6 @@ async def get_ops_dashboard(db: AsyncSession = Depends(get_session)) -> dict:
 # ---- Patient list + detail endpoints (powers the ops console) ---------------
 
 
-class PatientSummaryDTO(BaseModel):
-    """Lightweight row for the patients list page."""
-
-    id: int
-    full_name: str
-    phone: str
-    cohort_diabetes: bool
-    cohort_cardiac: bool
-    cohort_fall_risk: bool
-    active_regimen_count: int
-    upcoming_appointment_count: int
-    open_ticket_count: int
-    created_at: datetime
-
-
-class AdherenceSummaryDTO(BaseModel):
-    window_days: int
-    total: int
-    taken: int            # all takens (on-time + late)
-    taken_on_time: int    # tapped Taken inside the grace window
-    taken_late: int       # tapped Mark-as-taken after sweep marked missed
-    missed: int
-    skipped: int
-    delayed: int
-    scheduled: int
-    adherence_rate: float  # taken / (taken + missed + skipped); 0..1
-    on_time_rate: float    # taken_on_time / taken; 0..1 (NaN-safe → 0.0)
-
-
 class AdherenceEventDTO(BaseModel):
     id: int
     regimen_id: int | None
@@ -1851,38 +1825,6 @@ def _refill_event_label(status: str, error_field: str | None) -> str:
     if status == "failed":
         return f"failed: {error_field}" if error_field else "failed"
     return status
-
-
-def _adherence_summary(
-    events: list[Any], window_days: int = 30
-) -> AdherenceSummaryDTO:
-    counts = {"taken": 0, "missed": 0, "skipped": 0, "delayed": 0, "scheduled": 0}
-    taken_late = 0
-    for e in events:
-        v = e.status.value if hasattr(e.status, "value") else str(e.status)
-        if v in counts:
-            counts[v] += 1
-        if v == "taken":
-            metadata = getattr(e, "confirmation_metadata", None) or {}
-            if metadata.get("late_confirmed"):
-                taken_late += 1
-    completed = counts["taken"] + counts["missed"] + counts["skipped"]
-    rate = (counts["taken"] / completed) if completed else 0.0
-    on_time = counts["taken"] - taken_late
-    on_time_rate = (on_time / counts["taken"]) if counts["taken"] else 0.0
-    return AdherenceSummaryDTO(
-        window_days=window_days,
-        total=len(events),
-        taken=counts["taken"],
-        taken_on_time=on_time,
-        taken_late=taken_late,
-        missed=counts["missed"],
-        skipped=counts["skipped"],
-        delayed=counts["delayed"],
-        scheduled=counts["scheduled"],
-        adherence_rate=round(rate, 3),
-        on_time_rate=round(on_time_rate, 3),
-    )
 
 
 @app.get("/patients", response_model=list[PatientSummaryDTO])
