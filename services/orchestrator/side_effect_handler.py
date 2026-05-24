@@ -336,6 +336,59 @@ def _build_ticket_notes(
     return "\n".join(lines)
 
 
+def _extract_reported_text(notes: str | None) -> str | None:
+    """Pull the verbatim patient-said block back out of a side_effect_report
+    ticket's notes — the inverse of ``_build_ticket_notes`` above, which is
+    why both live here (one place owns the notes format).
+
+    ``_build_ticket_notes`` writes::
+
+        [side-effect report]
+        Reported at: 2026-05-07T22:00:00+00:00
+
+        Patient said:
+          > metformin gave me severe headaches
+
+        Active regimens at time of report:
+          - Metformin 500 mg
+
+    The "Patient said:" block is what doctors care about — extracting it for
+    the side-effect DTOs / digest / export keeps the UI clean (no multi-line
+    markdown parsing on the frontend) and centralises the notes-format
+    coupling here so a future migration to a structured ``inbound_text``
+    column only touches this module.
+
+    Returns None when the block is missing (legacy tickets, manually created
+    tickets, future format changes) — callers fall back to rendering raw
+    notes in that case rather than crashing.
+    """
+    if not notes:
+        return None
+    marker = "Patient said:"
+    idx = notes.find(marker)
+    if idx == -1:
+        return None
+    after = notes[idx + len(marker) :]
+    lines: list[str] = []
+    # Block ends at first blank line OR first line that doesn't
+    # start with the ``  > `` marker we use for the verbatim quote.
+    for raw in after.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            if lines:
+                break  # blank after some content → end of block
+            continue  # blank before content → skip
+        # Strip the leading "> " quote marker from each line.
+        if stripped.startswith(">"):
+            lines.append(stripped.lstrip(">").strip())
+        else:
+            # First non-quote line ends the block.
+            break
+    if not lines:
+        return None
+    return "\n".join(lines).strip() or None
+
+
 def _reply(body: str, *, audit_codes: list[str]) -> dict[str, Any]:
     return {
         "response_body": body,

@@ -18,7 +18,7 @@ Failure mode behaviour matters here:
 
 from __future__ import annotations
 
-from services.orchestrator.main import _extract_reported_text
+from services.orchestrator.side_effect_handler import _extract_reported_text
 
 
 # ---- Happy path ---------------------------------------------------------

@@ -309,8 +309,11 @@ async def _side_effect_section(
     if not tickets:
         return []
 
-    # Lazy import to avoid the circular with main.py's helper.
-    from services.orchestrator.main import _extract_reported_text
+    # Lazy import; the extractor lives in side_effect_handler (next to
+    # the writer that produces the notes format).
+    from services.orchestrator.side_effect_handler import (
+        _extract_reported_text,
+    )
 
     out: list[SideEffectDigestRow] = []
     for t in tickets:

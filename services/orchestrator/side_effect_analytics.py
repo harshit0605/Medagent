@@ -185,10 +185,12 @@ _MAX_TOP_SYMPTOMS = 12
 
 
 def _import_extractor():
-    """Lazy import of the notes extractor from main.py to break
-    the circular import (main imports analytics, analytics needs
-    the extractor)."""
-    from services.orchestrator.main import _extract_reported_text
+    """Lazy import of the notes extractor. It lives in
+    ``side_effect_handler`` (alongside the writer that produces the
+    notes format); the lazy import keeps this module import-light."""
+    from services.orchestrator.side_effect_handler import (
+        _extract_reported_text,
+    )
 
     return _extract_reported_text
 

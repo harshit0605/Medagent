@@ -330,13 +330,9 @@ async def _exemptions_section(
 async def _side_effect_reports_section(
     db: AsyncSession, patient_phone: str
 ) -> list[dict[str, Any]]:
-    # Lazy import — ``_extract_reported_text`` lives in
-    # ``services.orchestrator.main`` (the FastAPI app), and main
-    # imports THIS module to wire up the export endpoint. A
-    # top-level import would be circular; the function-level import
-    # breaks the cycle. The helper is small + the import is cached
-    # after first call so cost is negligible.
-    from services.orchestrator.main import _extract_reported_text
+    from services.orchestrator.side_effect_handler import (
+        _extract_reported_text,
+    )
 
     rows = await ops_tickets_repo.list_for_patient_by_category(
         db, patient_phone, "side_effect_report", limit=200
