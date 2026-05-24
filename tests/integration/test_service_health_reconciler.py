@@ -141,8 +141,12 @@ async def test_stale_reconciler_is_idempotent():
     # shared DB can make it >1. Assert >=1 and rely on the per-key check below
     # for exactness.
     assert first["stale_opened"] >= 1
-    # Second pass sees the open ticket and skips (opens nothing NEW).
-    assert second["stale_opened"] == 0
+    # Idempotency is proven per-component: after TWO passes our component has
+    # exactly ONE open ticket (the second pass saw it open and skipped). We do
+    # NOT assert second["stale_opened"] == 0 — that's a GLOBAL count, and an
+    # unrelated component crossing its staleness threshold between the two
+    # passes (shared DB) can legitimately make it >0.
+    assert second["stale_opened"] >= 0  # ran without error
     open_now = await _open_service_health_tickets_for(expected_patient)
     assert len(open_now) == 1
 
