@@ -60,6 +60,25 @@ def _lab_to_dto(row: LabFollowup) -> LabFollowupDTO:
     )
 
 
+class AppointmentDTO(BaseModel):
+    """Shared by the doctor/appointments router (get_appointment) and the
+    pre-visit summary aggregate. Constructed inline at each call site (no
+    _to_dto helper) since the joins differ slightly."""
+
+    id: int
+    patient_id: int
+    doctor_id: int
+    doctor_name: str | None = None
+    doctor_timezone: str | None = None
+    patient_full_name: str | None = None
+    scheduled_for: datetime
+    end_at: datetime
+    status: str
+    summary: str | None = None
+    notes: str | None = None
+    calendar_html_link: str | None = None
+
+
 class RegimenDTO(BaseModel):
     id: int
     patient_id: int

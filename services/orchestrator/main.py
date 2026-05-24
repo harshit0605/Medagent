@@ -75,6 +75,7 @@ from services.orchestrator.routers import regimen as regimen_router
 from services.orchestrator.routers import side_effect_analytics as side_effect_analytics_router
 from services.orchestrator.routers import visit_briefs as visit_briefs_router
 from services.orchestrator.routers._dtos import (
+    AppointmentDTO,
     LabFollowupDTO,
     RegimenDTO,
     _lab_to_dto,
@@ -1784,21 +1785,6 @@ async def cancel_doctor_appointment(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-
-class AppointmentDTO(BaseModel):
-    id: int
-    patient_id: int
-    doctor_id: int
-    doctor_name: str | None = None
-    doctor_timezone: str | None = None
-    patient_full_name: str | None = None
-    scheduled_for: datetime
-    end_at: datetime
-    status: str
-    summary: str | None = None
-    notes: str | None = None
-    calendar_html_link: str | None = None
 
 
 @app.get("/appointments/{appointment_id}", response_model=AppointmentDTO)
