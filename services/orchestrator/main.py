@@ -59,6 +59,7 @@ from services.orchestrator.inbox_classifier import (
 )
 from services.orchestrator.recap_generator import RecapContext, generate_recap
 from services.orchestrator import transcription
+from services.orchestrator.routers import orders as orders_router
 from services.scheduler import dose_reminders
 from services.scheduler import lab_followups as lab_followups_scheduler
 from services.orchestrator.agent_workflow import (
@@ -213,6 +214,12 @@ async def _api_key_auth(request: Request, call_next):
                 content={"detail": "invalid or missing API key"},
             )
     return await call_next(request)
+
+
+# Domain routers extracted from this module (incremental decomposition of the
+# historically-monolithic main.py). Each is self-contained; see
+# services/orchestrator/routers/.
+app.include_router(orders_router.router)
 
 
 def _get_graph(request: Request) -> Any | None:
@@ -6109,233 +6116,6 @@ async def end_pregnancy(
         patient.cohort_pregnancy = False
         await db.flush()
     dto = _pregnancy_to_dto(row)
-    await db.commit()
-    return dto
-
-
-# ---- Orders / refill execute layer (task #12) -------------------------------
-
-
-class OrderDTO(BaseModel):
-    id: int
-    patient_id: int
-    regimen_id: int | None
-    medication_name: str
-    dose: str | None
-    quantity: str | None
-    partner: str
-    status: str
-    partner_order_id: str | None
-    partner_deeplink: str | None
-    receipt_url: str | None
-    substitution_status: str | None
-    substitution_medication: str | None
-    substitution_note: str | None
-    notes: str | None
-    requested_via: str | None
-    created_at: datetime
-    updated_at: datetime
-
-
-class OrderCreateRequest(BaseModel):
-    """Create a reorder. Provide ``regimen_id`` to reorder an existing regimen
-    (med/dose are snapshotted from it), or pass ``medication_name`` directly
-    for an ad-hoc order."""
-
-    regimen_id: int | None = None
-    medication_name: str | None = Field(default=None, max_length=255)
-    dose: str | None = Field(default=None, max_length=128)
-    quantity: str | None = Field(default=None, max_length=64)
-    notes: str | None = Field(default=None, max_length=2000)
-
-
-class OrderStatusRequest(BaseModel):
-    status: Literal[
-        "pending", "processing", "shipped", "delivered", "canceled"
-    ]
-
-
-class SubstitutionProposeRequest(BaseModel):
-    medication: str = Field(min_length=1, max_length=255)
-    note: str | None = Field(default=None, max_length=2000)
-
-
-def _order_to_dto(row: Any) -> OrderDTO:
-    return OrderDTO(
-        id=row.id,
-        patient_id=row.patient_id,
-        regimen_id=row.regimen_id,
-        medication_name=row.medication_name,
-        dose=row.dose,
-        quantity=row.quantity,
-        partner=row.partner,
-        status=row.status,
-        partner_order_id=row.partner_order_id,
-        partner_deeplink=row.partner_deeplink,
-        receipt_url=row.receipt_url,
-        substitution_status=row.substitution_status,
-        substitution_medication=row.substitution_medication,
-        substitution_note=row.substitution_note,
-        notes=row.notes,
-        requested_via=row.requested_via,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
-@app.post("/patients/{patient_id}/orders", response_model=OrderDTO)
-async def create_order(
-    patient_id: int,
-    body: OrderCreateRequest,
-    db: AsyncSession = Depends(get_session),
-) -> OrderDTO:
-    """Place a reorder through the (replaceable) pharmacy adapter and persist
-    it. Dedupes against an existing in-flight order for the same regimen."""
-    from app.db.repositories import orders as orders_repo
-    from services.orchestrator.pharmacy import (
-        OrderRequest,
-        get_pharmacy_adapter,
-    )
-
-    patient = await patients_repo.get(db, patient_id)
-    if patient is None:
-        raise HTTPException(status_code=404, detail="patient not found")
-
-    med_name = body.medication_name
-    dose = body.dose
-    if body.regimen_id is not None:
-        regimen = await regimens_repo.get(db, body.regimen_id)
-        if regimen is None or regimen.patient_id != patient_id:
-            raise HTTPException(
-                status_code=404, detail="regimen not found for patient"
-            )
-        med_name = med_name or regimen.medication_name
-        dose = dose or regimen.dose
-        existing = await orders_repo.get_open_for_regimen(db, body.regimen_id)
-        if existing is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=f"an order is already in flight (id={existing.id})",
-            )
-    if not med_name:
-        raise HTTPException(
-            status_code=400,
-            detail="medication_name is required when regimen_id is omitted",
-        )
-
-    adapter = get_pharmacy_adapter()
-    result = await adapter.place_order(
-        OrderRequest(
-            patient_phone=patient.phone,
-            medication_name=med_name,
-            dose=dose,
-            quantity=body.quantity,
-            regimen_id=body.regimen_id,
-        )
-    )
-    row = await orders_repo.create(
-        db,
-        patient_id=patient_id,
-        regimen_id=body.regimen_id,
-        medication_name=med_name,
-        dose=dose,
-        quantity=body.quantity,
-        partner=result.partner,
-        partner_order_id=result.partner_order_id,
-        partner_deeplink=result.deeplink,
-        status=result.status,
-        requested_via="api",
-        notes=body.notes,
-    )
-    dto = _order_to_dto(row)
-    await db.commit()
-    return dto
-
-
-@app.get("/patients/{patient_id}/orders", response_model=list[OrderDTO])
-async def list_patient_orders(
-    patient_id: int,
-    limit: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_session),
-) -> list[OrderDTO]:
-    from app.db.repositories import orders as orders_repo
-
-    rows = await orders_repo.list_for_patient(db, patient_id, limit=limit)
-    return [_order_to_dto(r) for r in rows]
-
-
-@app.post("/orders/{order_id}/status", response_model=OrderDTO)
-async def update_order_status(
-    order_id: int,
-    body: OrderStatusRequest,
-    db: AsyncSession = Depends(get_session),
-) -> OrderDTO:
-    """Advance an order's fulfillment status (ops console / partner webhook).
-    On the transition into ``delivered`` we enqueue a patient-facing delivery
-    receipt (MVP #7)."""
-    from app.db.repositories import orders as orders_repo
-
-    existing = await orders_repo.get(db, order_id)
-    if existing is None:
-        raise HTTPException(status_code=404, detail="order not found")
-    was_delivered = existing.status == "delivered"
-
-    try:
-        row = await orders_repo.set_status(db, order_id, status=body.status)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    # First transition into "delivered" → send a receipt.
-    if body.status == "delivered" and not was_delivered:
-        patient = await patients_repo.get(db, row.patient_id)
-        if patient is not None and patient.phone:
-            await scheduled_events_repo.enqueue(
-                db,
-                event_type="order_receipt",
-                patient_id=patient.phone,
-                payload={"order_id": row.id},
-                scheduled_for=datetime.now(timezone.utc),
-            )
-
-    dto = _order_to_dto(row)
-    await db.commit()
-    return dto
-
-
-@app.post(
-    "/orders/{order_id}/propose-substitution", response_model=OrderDTO
-)
-async def propose_order_substitution(
-    order_id: int,
-    body: SubstitutionProposeRequest,
-    db: AsyncSession = Depends(get_session),
-) -> OrderDTO:
-    """Partner proposes a substitution; record it and enqueue a
-    ``substitution_approval_v1`` ask so the patient can approve/decline."""
-    from app.db.repositories import orders as orders_repo
-
-    row = await orders_repo.propose_substitution(
-        db, order_id, medication=body.medication, note=body.note
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="order not found")
-
-    # Enqueue the patient-facing approval request (dispatcher renders it as the
-    # substitution_approval_v1 template / interactive buttons).
-    patient = await patients_repo.get(db, row.patient_id)
-    if patient is not None and patient.phone:
-        await scheduled_events_repo.enqueue(
-            db,
-            event_type="order_substitution_request",
-            patient_id=patient.phone,
-            payload={
-                "order_id": row.id,
-                "medication_name": row.medication_name,
-                "substitution_medication": row.substitution_medication,
-            },
-            scheduled_for=datetime.now(timezone.utc),
-        )
-    dto = _order_to_dto(row)
     await db.commit()
     return dto
 
