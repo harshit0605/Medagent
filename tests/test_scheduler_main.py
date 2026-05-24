@@ -165,6 +165,57 @@ async def test_dispatch_returns_http_error_string_on_failure(monkeypatch):
     assert err.startswith("http_error:")
 
 
+def test_is_permanent_http_status():
+    f = dispatcher_module._is_permanent_http_status
+    # 4xx is permanent — except the two retryable ones.
+    assert f(400) is True
+    assert f(404) is True
+    assert f(422) is True
+    assert f(408) is False  # request timeout — retryable
+    assert f(429) is False  # rate limited — retryable
+    # 5xx is transient.
+    assert f(500) is False
+    assert f(503) is False
+
+
+async def test_dispatch_4xx_is_permanent(monkeypatch):
+    """A 4xx from the gateway (bad recipient / unknown template) is a
+    PERMANENT failure → ``http_error_permanent:`` so it routes to the DLQ
+    instead of burning the retry budget."""
+    def post(url, json):  # noqa: ARG001
+        return httpx.Response(400, request=httpx.Request("POST", url))
+
+    _patch_async_client(monkeypatch, post=post)
+    err = await dispatcher_module.dispatch(
+        _fake_event(
+            event_type="triage_alert",
+            payload={"cohort": "diabetes", "severity": "high", "reason": "x"},
+        ),
+        gateway_url="http://gw:1",
+    )
+    assert err is not None
+    assert err.startswith("http_error_permanent:")
+
+
+async def test_dispatch_5xx_is_transient(monkeypatch):
+    """A 5xx is a transient gateway/Meta fault → plain ``http_error:`` so the
+    normal retry backoff applies (NOT the permanent/DLQ path)."""
+    def post(url, json):  # noqa: ARG001
+        return httpx.Response(503, request=httpx.Request("POST", url))
+
+    _patch_async_client(monkeypatch, post=post)
+    err = await dispatcher_module.dispatch(
+        _fake_event(
+            event_type="triage_alert",
+            payload={"cohort": "diabetes", "severity": "high", "reason": "x"},
+        ),
+        gateway_url="http://gw:1",
+    )
+    assert err is not None
+    assert err.startswith("http_error:")
+    assert not err.startswith("http_error_permanent:")
+
+
 async def test_dispatch_stringifies_payload_params(monkeypatch):
     captured = _patch_async_client(monkeypatch)
     await dispatcher_module.dispatch(

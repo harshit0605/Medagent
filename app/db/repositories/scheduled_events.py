@@ -196,6 +196,7 @@ async def mark_failed(
     event_id: int,
     *,
     error: str,
+    permanent: bool = False,
     now: datetime | None = None,
 ) -> ScheduledEvent | None:
     """Record a dispatch failure and decide whether to schedule a
@@ -207,6 +208,11 @@ async def mark_failed(
 
         - non-null + future → will be retried automatically
         - null + status=failed → DLQ (attempts exhausted; ops only)
+
+    ``permanent=True`` forces the DLQ immediately, regardless of
+    attempt_count: the failure is not transient (e.g. a 4xx from the
+    gateway — invalid recipient, unknown template), so the backoff
+    schedule would only waste attempts before giving up anyway.
     """
     row = await session.get(ScheduledEvent, event_id)
     if row is None:
@@ -216,8 +222,10 @@ async def mark_failed(
     row.error = error[:1000]
     row.attempt_count = (row.attempt_count or 0) + 1
     row.last_failed_at = when
-    row.next_retry_at = _compute_next_retry(
-        attempt_count=row.attempt_count, now=when
+    row.next_retry_at = (
+        None
+        if permanent
+        else _compute_next_retry(attempt_count=row.attempt_count, now=when)
     )
     await session.flush()
     return row

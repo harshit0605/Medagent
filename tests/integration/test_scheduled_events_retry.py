@@ -102,6 +102,27 @@ async def test_mark_failed_until_dlq(monkeypatch):
         assert second.status == ScheduledEventStatus.failed
 
 
+async def test_mark_failed_permanent_goes_straight_to_dlq():
+    """A permanent failure (e.g. a 4xx from the gateway) must DLQ on the FIRST
+    attempt — next_retry_at is None even though the backoff budget isn't
+    exhausted. Retrying a bad-request send would never succeed."""
+    phone = _phone()
+    eid = await _enqueue(phone=phone)
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        row = await repo.mark_failed(
+            db,
+            eid,
+            error="http_error_permanent:HTTPStatusError:400",
+            permanent=True,
+        )
+        await db.commit()
+        assert row.status == ScheduledEventStatus.failed
+        assert row.attempt_count == 1
+        # DLQ, not scheduled for retry.
+        assert row.next_retry_at is None
+
+
 # ---- fetch_due picks up retry-due rows -----------------------------------
 
 

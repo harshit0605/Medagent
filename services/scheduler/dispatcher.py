@@ -1262,6 +1262,18 @@ async def _handle_clinical_alert_page(
     return None
 
 
+def _is_permanent_http_status(status_code: int) -> bool:
+    """Whether a gateway/Meta HTTP status is a PERMANENT send failure.
+
+    A 4xx means the request itself is bad (invalid recipient, unknown
+    template, malformed params) — retrying won't help, so it should go
+    straight to the DLQ. The two exceptions are 408 (Request Timeout) and
+    429 (Too Many Requests), which are retryable. 5xx is a transient
+    server-side fault and is also retryable.
+    """
+    return 400 <= status_code < 500 and status_code not in (408, 429)
+
+
 async def dispatch(
     event: ScheduledEvent,
     *,
@@ -1409,7 +1421,23 @@ async def dispatch(
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(url, json=message)
             response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # A 4xx (bad recipient, unknown template, malformed params) is a
+        # PERMANENT failure — retrying just burns the backoff budget, so flag
+        # it (``http_error_permanent:``) for immediate DLQ. 408/429 stay
+        # retryable; 5xx is a transient gateway/Meta fault → normal retry.
+        status = exc.response.status_code
+        if _is_permanent_http_status(status):
+            log.warning(
+                "dispatch permanently failed for event %s: HTTP %s",
+                event.id,
+                status,
+            )
+            return f"http_error_permanent:HTTPStatusError:{status}"
+        log.warning("dispatch failed for event %s: HTTP %s", event.id, status)
+        return f"http_error:HTTPStatusError:{status}"
     except httpx.HTTPError as exc:
+        # Network / timeout — transient, retry.
         log.warning("dispatch failed for event %s: %s", event.id, exc)
         return f"http_error:{type(exc).__name__}:{exc}"
     return None

@@ -835,8 +835,13 @@ async def _run_tick_once(*, gateway_url: str | None = None) -> dict[str, Any]:
                     )
                     skipped += 1
                 else:
+                    # Permanent failures (4xx from the gateway) skip the retry
+                    # backoff and go straight to the DLQ — retrying won't help.
                     await scheduled_events_repo.mark_failed(
-                        db, event.id, error=err
+                        db,
+                        event.id,
+                        error=err,
+                        permanent=err.startswith("http_error_permanent:"),
                     )
                     failed += 1
                 # Persist THIS event's send + mark before touching the next one
