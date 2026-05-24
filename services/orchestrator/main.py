@@ -67,6 +67,7 @@ from services.orchestrator.routers import doctor_replies as doctor_replies_route
 from services.orchestrator.routers import households as households_router
 from services.orchestrator.routers import lab_followups as lab_followups_router
 from services.orchestrator.routers import llm_cost_analytics as llm_cost_analytics_router
+from services.orchestrator.routers import ops_analytics as ops_analytics_router
 from services.orchestrator.routers import ops_health as ops_health_router
 from services.orchestrator.routers import orders as orders_router
 from services.orchestrator.routers import post_op as post_op_router
@@ -260,6 +261,7 @@ app.include_router(doctor_inbox_router.router)
 app.include_router(broadcast_router.router)
 app.include_router(doctor_replies_router.router)
 app.include_router(ops_health_router.router)
+app.include_router(ops_analytics_router.router)
 
 
 def _get_graph(request: Request) -> Any | None:
@@ -2588,123 +2590,7 @@ async def send_appointment_recap(
     return _recap_to_dto(updated)
 
 
-# ---- /ops/analytics — program-level outcome snapshot ----------------------
-
-
-class AdherenceSnapshotDTO(BaseModel):
-    total: int
-    taken: int
-    missed: int
-    skipped: int
-    delayed: int
-    scheduled: int
-    rate: float
-
-
-class RecapFunnelDTO(BaseModel):
-    draft: int
-    sent: int
-    acknowledged: int
-    questioned: int
-    sent_total: int
-    ack_rate: float
-
-
-class InboxCompositionDTO(BaseModel):
-    by_category: dict[str, int]
-    by_urgency: dict[str, int]
-    by_input_kind: dict[str, int]
-
-
-class OpsQueueAnalyticsDTO(BaseModel):
-    open_total: int
-    by_priority: dict[str, int]
-    opened_in_window: int
-    resolved_in_window: int
-    median_resolve_minutes: float | None
-
-
-class AdherenceBucketDTO(BaseModel):
-    date: str
-    taken: int
-    missed: int
-    skipped: int
-    delayed: int
-    scheduled: int
-    rate: float
-
-
-class InboxBucketDTO(BaseModel):
-    date: str
-    total: int
-    critical: int
-    high: int
-    medium: int
-    low: int
-
-
-class RecapBucketDTO(BaseModel):
-    date: str
-    sent: int
-    acked: int
-
-
-class TicketBucketDTO(BaseModel):
-    date: str
-    opened: int
-    resolved: int
-
-
-class AnalyticsTimeseriesDTO(BaseModel):
-    window_days: int
-    adherence: list[AdherenceBucketDTO]
-    inbox: list[InboxBucketDTO]
-    recap: list[RecapBucketDTO]
-    tickets: list[TicketBucketDTO]
-
-
-class AnalyticsSnapshotDTO(BaseModel):
-    window_days: int
-    since: datetime
-    adherence: AdherenceSnapshotDTO
-    recap_funnel: RecapFunnelDTO
-    inbox: InboxCompositionDTO
-    ops_queue: OpsQueueAnalyticsDTO
-    timeseries: AnalyticsTimeseriesDTO
-
-
-@app.get("/ops/analytics", response_model=AnalyticsSnapshotDTO)
-async def get_ops_analytics(
-    db: AsyncSession = Depends(get_session),
-    days: int = 30,
-) -> AnalyticsSnapshotDTO:
-    """Program-level outcome snapshot — adherence, recap funnel, inbox
-    composition, ops queue throughput, plus daily time-series for the
-    sparkline charts. Read-only; cheap; safe to poll from the
-    analytics page on every render."""
-    if days < 1 or days > 365:
-        raise HTTPException(
-            status_code=400, detail="days must be between 1 and 365"
-        )
-    snapshot = await dashboard_repo.analytics_snapshot(db, days=days)
-    timeseries = await dashboard_repo.analytics_timeseries(db, days=days)
-    return AnalyticsSnapshotDTO(
-        window_days=snapshot["window_days"],
-        since=snapshot["since"],
-        adherence=AdherenceSnapshotDTO(**snapshot["adherence"]),
-        recap_funnel=RecapFunnelDTO(**snapshot["recap_funnel"]),
-        inbox=InboxCompositionDTO(**snapshot["inbox"]),
-        ops_queue=OpsQueueAnalyticsDTO(**snapshot["ops_queue"]),
-        timeseries=AnalyticsTimeseriesDTO(
-            window_days=timeseries["window_days"],
-            adherence=[
-                AdherenceBucketDTO(**b) for b in timeseries["adherence"]
-            ],
-            inbox=[InboxBucketDTO(**b) for b in timeseries["inbox"]],
-            recap=[RecapBucketDTO(**b) for b in timeseries["recap"]],
-            tickets=[TicketBucketDTO(**b) for b in timeseries["tickets"]],
-        ),
-    )
+# ---- /ops/dashboard — program metrics + queue + alerts ---------------------
 
 
 @app.get("/ops/dashboard")
