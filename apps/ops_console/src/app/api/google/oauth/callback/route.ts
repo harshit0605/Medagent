@@ -14,7 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { STATE_COOKIE_NAME, readOAuthEnv } from "@/lib/google-oauth";
 
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL ?? "http://localhost:31417";
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL ?? "http://localhost:8002";
+const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,9 +60,16 @@ export async function GET(request: NextRequest) {
   // Forward the code to the orchestrator for the server-to-server token exchange.
   let res: Response;
   try {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    // Authenticate the server-to-server call when the orchestrator enforces
+    // a shared secret (it fails closed by default). Without this the exchange
+    // would 401 and every OAuth connect would fail with orchestrator_401.
+    if (ORCHESTRATOR_API_KEY) headers["x-api-key"] = ORCHESTRATOR_API_KEY;
     res = await fetch(`${ORCHESTRATOR_URL}/doctors/${doctorId}/oauth/callback`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify({ code, redirect_uri: env.redirectUri }),
       cache: "no-store",
     });

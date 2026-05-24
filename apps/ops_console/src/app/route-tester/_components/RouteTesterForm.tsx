@@ -122,14 +122,26 @@ function RouteResultCard({ result }: { result: NonNullable<RouteActionState["res
   return (
     <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <span
-          className={
-            "px-2 py-0.5 rounded text-xs font-medium " +
-            (RUNNER_BADGE[result.runner] ?? "")
-          }
-        >
-          {result.runner}
-        </span>
+        {result.runner ? (
+          <span
+            className={
+              "px-2 py-0.5 rounded text-xs font-medium " +
+              (RUNNER_BADGE[result.runner] ?? "")
+            }
+          >
+            {result.runner}
+          </span>
+        ) : null}
+        {result.rate_limited ? (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-600 text-white">
+            RATE LIMITED
+          </span>
+        ) : null}
+        {result.deduped ? (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-zinc-500 text-white">
+            DUPLICATE IGNORED
+          </span>
+        ) : null}
         <span
           className={
             "px-2 py-0.5 rounded text-xs font-medium " +
@@ -168,14 +180,16 @@ function RouteResultCard({ result }: { result: NonNullable<RouteActionState["res
         </div>
       </div>
 
-      <div>
-        <div className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Policy</div>
-        <div className="text-sm">{result.policy.reason}</div>
-        <div className="mt-1 text-xs text-zinc-500">
-          freeform window: {String(result.policy.in_customer_service_window)} ·
-          use_template: {String(result.policy.use_template)}
+      {result.policy ? (
+        <div>
+          <div className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Policy</div>
+          <div className="text-sm">{result.policy.reason}</div>
+          <div className="mt-1 text-xs text-zinc-500">
+            freeform window: {String(result.policy.in_customer_service_window)} ·
+            use_template: {String(result.policy.use_template)}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div>
         <div className="text-xs uppercase tracking-wide text-zinc-500 mb-1">

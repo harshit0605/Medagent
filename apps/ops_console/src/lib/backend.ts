@@ -26,7 +26,13 @@ type FetchOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | undefined>;
+  // Per-call timeout. Defaults to 30s — generous enough for the slowest
+  // endpoints (DSAR export, LLM draft) while still bounding a hung backend
+  // so a request can't pin a server worker indefinitely.
+  timeoutMs?: number;
 };
+
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 async function call<T>(base: string, path: string, opts: FetchOptions = {}): Promise<T> {
   const url = new URL(path, base);
@@ -43,20 +49,44 @@ async function call<T>(base: string, path: string, opts: FetchOptions = {}): Pro
   if (ORCHESTRATOR_API_KEY && base === ORCHESTRATOR_URL) {
     headers["x-api-key"] = ORCHESTRATOR_API_KEY;
   }
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const init: RequestInit = {
     method: opts.method ?? "GET",
     cache: "no-store",
     headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: AbortSignal.timeout(timeoutMs),
   };
-  const res = await fetch(url, init);
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (err) {
+    // AbortSignal.timeout aborts with a DOMException named "TimeoutError".
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      throw new Error(
+        `${init.method} ${url.pathname} timed out after ${timeoutMs}ms`,
+      );
+    }
+    throw err;
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`${init.method} ${url.pathname} ${res.status}: ${text || res.statusText}`);
   }
   // 204 No Content (e.g. DELETE) — nothing to parse.
   if (res.status === 204) return null as T;
-  return (await res.json()) as T;
+  // Guard JSON parsing: a 200 with an empty or non-JSON body (a stray proxy
+  // error page, an HTML 200) would otherwise throw an opaque SyntaxError.
+  const raw = await res.text();
+  if (!raw) return null as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(
+      `${init.method} ${url.pathname}: expected JSON but got ` +
+        `${res.headers.get("content-type") ?? "an unparseable body"}`,
+    );
+  }
 }
 
 // ---- Orchestrator ----------------------------------------------------------
@@ -253,14 +283,10 @@ export type HealthSummary = {
 
 export type RouteResponse = {
   intent: string;
-  policy: { in_customer_service_window: boolean; use_template: boolean; reason: string };
-  policy_reason_codes: string[];
   flow_action: string;
   risk_level: string;
   escalation_required: boolean;
   audit_reasons: string[];
-  ticket_id: string | null;
-  runner: "langgraph" | "sync_fallback";
   message_out: {
     patient_id: string | null;
     body: string | null;
@@ -269,6 +295,18 @@ export type RouteResponse = {
     quick_replies: { id: string; title: string }[];
     buttons: { id: string; label: string; action: string }[];
   };
+  // The fields below are present on the normal routing path but OMITTED by the
+  // short-circuit branches: the rate-limit gate and the inbound-replay dedupe
+  // both return a reduced payload (empty-body message_out + a marker). Optional
+  // so consumers must handle their absence rather than crash on undefined.
+  policy?: { in_customer_service_window: boolean; use_template: boolean; reason: string };
+  policy_reason_codes?: string[];
+  ticket_id?: string | null;
+  runner?: "langgraph" | "sync_fallback";
+  rate_limited?: boolean;
+  rate_limit_count?: number;
+  rate_limit_window_minutes?: number;
+  deduped?: boolean;
 };
 
 export type Doctor = {
