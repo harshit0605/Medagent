@@ -163,7 +163,10 @@ async def test_sweep_missing_recaps_idempotent_with_open_ticket():
         await db.commit()
         second = await recap_sweeps.sweep_missing_recaps(db)
         await db.commit()
-    assert first["opened"] == 1
+    # ``opened`` is a GLOBAL count — another test's missing-recap appointment
+    # can make the first pass open >1. What this test asserts is idempotency:
+    # the second pass opens nothing new and skips the already-ticketed one.
+    assert first["opened"] >= 1
     assert second["opened"] == 0
     assert second["skipped_existing"] >= 1
 

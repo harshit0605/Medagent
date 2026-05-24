@@ -19,7 +19,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db.models import (
+    Appointment,
     AppointmentRecap,
+    AppointmentStatus,
     Doctor,
     DoctorOAuthStatus,
     Patient,
@@ -151,37 +153,67 @@ async def test_window_cutoff_exact():
 # ---- Aggregator math ---------------------------------------------------
 
 
-async def test_recap_ack_rate_computed_correctly():
-    """ack_rate = acknowledged / (sent + acknowledged + questioned).
-    Drafts must NOT pollute the denominator."""
-    uuid.uuid4().hex[:8]
+async def test_recap_funnel_excludes_drafts():
+    """A DRAFT recap must not count toward the funnel denominator
+    (``sent_total`` = sent + acknowledged + questioned). Seed one sent + one
+    draft recap and assert only the sent one moves the totals. Delta-based
+    (before vs after) so it's robust to other recaps already in the shared DB
+    — and it actually exercises draft-exclusion (the old version asserted
+    ``sent_total == sent + ack + questioned``, which is how the helper computes
+    sent_total, i.e. a tautology that could never fail)."""
+    suffix = uuid.uuid4().hex[:8]
     SessionLocal = get_sessionmaker()
+    since = datetime.now(timezone.utc) - timedelta(days=365)
+
     async with SessionLocal() as db:
-        # Use existing patient + doctor + appointment to avoid FK
-        # complications. The seed data we write IS what the test asserts.
-        existing_patient = (
-            await db.execute(Patient.__table__.select().limit(1))
-        ).first()
-        if existing_patient is None:
-            pytest.skip("no existing patient to attach recap to")
-        existing_doctor = (
-            await db.execute(Doctor.__table__.select().limit(1))
-        ).first()
-        if existing_doctor is None:
-            pytest.skip("no existing doctor to attach recap to")
-        # Skip seeding bespoke recaps — too tight a coupling to the
-        # appointment FK. Instead, just call the aggregator and assert
-        # ack_rate is in [0, 1] AND that the sum of sent_total parts
-        # equals what the helper computed.
-        funnel = await dashboard_repo.recap_funnel_window(
-            db, since=datetime.now(timezone.utc) - timedelta(days=365)
+        before = await dashboard_repo.recap_funnel_window(db, since=since)
+
+    async with SessionLocal() as db:
+        patient = Patient(
+            full_name=f"Funnel {suffix}", phone=f"funnel-{suffix}"
         )
-    parts = funnel["sent"] + funnel["acknowledged"] + funnel["questioned"]
-    assert funnel["sent_total"] == parts
-    if parts > 0:
-        assert 0.0 <= funnel["ack_rate"] <= 1.0
-    else:
-        assert funnel["ack_rate"] == 0.0
+        db.add(patient)
+        doctor = Doctor(
+            name=f"Dr Funnel {suffix}",
+            email=f"dr-funnel-{suffix}@example.com",
+            timezone="UTC",
+            calendar_id="primary",
+            oauth_status=DoctorOAuthStatus.connected,
+        )
+        db.add(doctor)
+        await db.flush()
+        when = datetime.now(timezone.utc) - timedelta(hours=2)
+        # One sent recap (counts) + one draft recap (must NOT count). Each
+        # needs its own appointment (recap is unique per appointment).
+        for status in (RecapStatus.sent, RecapStatus.draft):
+            appt = Appointment(
+                patient_id=patient.id,
+                doctor_id=doctor.id,
+                scheduled_for=when,
+                end_at=when + timedelta(minutes=30),
+                status=AppointmentStatus.completed,
+                source="test",
+            )
+            db.add(appt)
+            await db.flush()
+            db.add(
+                AppointmentRecap(
+                    appointment_id=appt.id,
+                    patient_id=patient.id,
+                    doctor_id=doctor.id,
+                    structured_payload={},
+                    status=status,
+                )
+            )
+        await db.commit()
+
+    async with SessionLocal() as db:
+        after = await dashboard_repo.recap_funnel_window(db, since=since)
+
+    # The sent recap moved both counters by 1; the draft moved neither.
+    assert after["sent"] - before["sent"] == 1
+    assert after["sent_total"] - before["sent_total"] == 1
+    assert 0.0 <= after["ack_rate"] <= 1.0
 
 
 async def test_median_resolve_time_handles_empty_set():

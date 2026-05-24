@@ -137,8 +137,11 @@ async def test_stale_reconciler_is_idempotent():
         await db.commit()
         second = await service_health_reconciler.reconcile_service_health(db)
         await db.commit()
-    assert first["stale_opened"] == 1
-    # Second pass sees the open ticket and skips.
+    # ``stale_opened`` is a GLOBAL count — another component being stale in the
+    # shared DB can make it >1. Assert >=1 and rely on the per-key check below
+    # for exactness.
+    assert first["stale_opened"] >= 1
+    # Second pass sees the open ticket and skips (opens nothing NEW).
     assert second["stale_opened"] == 0
     open_now = await _open_service_health_tickets_for(expected_patient)
     assert len(open_now) == 1
@@ -149,7 +152,8 @@ async def test_stale_reconciler_is_idempotent():
         await db.commit()
         third = await service_health_reconciler.reconcile_service_health(db)
         await db.commit()
-    assert third["stale_opened"] == 1
+    # Recurrence reopens our component (global count, so >=1).
+    assert third["stale_opened"] >= 1
 
 
 # ---- Errored-component path ----------------------------------------------
