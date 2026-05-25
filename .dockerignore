@@ -1,0 +1,21 @@
+# Keep secrets, local state, and heavy dirs out of the build context/image.
+.env
+.env.*
+!.env.example
+.venv
+venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.pytest_cache
+.ruff_cache
+graphify-out
+node_modules
+apps/ops_console/node_modules
+apps/ops_console/.next
+apps/ops_console/.env*
+tests
+.claude
+*.md
+!README.md
