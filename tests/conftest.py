@@ -46,11 +46,18 @@ os.environ["LLM_ENABLED"] = "0"
 # compiled graph re-enable it via fixtures.
 os.environ["LANGGRAPH_ENABLED"] = "0"
 
-# The orchestrator fails closed when ORCHESTRATOR_API_KEY is unset (it serves
-# PHI). The test suite runs without a key and exercises both the auth-enabled
-# (monkeypatched) and auth-disabled middleware paths, so opt into the
-# unauthenticated mode explicitly here. ``setdefault`` so a real key still wins.
+# The orchestrator + gateway fail closed when their API key is unset (they
+# serve PHI / can send messages). The test suite runs UNAUTHENTICATED and
+# exercises both the auth-enabled (monkeypatched per-test) and auth-disabled
+# middleware paths, so opt into unauthenticated mode explicitly.
 os.environ.setdefault("ALLOW_UNAUTHENTICATED", "1")
+# ...and HARD-clear any real keys a developer has in their .env (which
+# ``source .env && pytest`` would otherwise export). With a key present the
+# middleware would enforce auth and 401 every TestClient call that doesn't
+# send it — i.e. nearly every integration test. test_api_auth monkeypatches
+# the module-level key when it specifically needs the enabled path.
+os.environ.pop("ORCHESTRATOR_API_KEY", None)
+os.environ.pop("GATEWAY_API_KEY", None)
 
 # Reset any cached LLM singleton that may already be enabled if a prior
 # in-process import loaded the module before this conftest ran.
