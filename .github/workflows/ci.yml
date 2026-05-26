@@ -95,6 +95,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Test (vitest)
+        run: npm test
+
       - name: Build (TypeScript compile + Next.js production build)
         env:
           # Build-time env is not used (no NEXT_PUBLIC_ vars; secrets read at

@@ -1,17 +1,13 @@
 /**
- * Tests for the X-Hub-Signature-256 verifier. Run via ``bun test``
- * — the ops_console doesn't have Jest configured, but bun has a
- * built-in Jest-compatible runner so a single test file works
- * without dependencies.
- *
- * The signature verifier is the gate for an ENTIRE class of
- * spoof attacks on our webhook (forged delivery statuses + forged
+ * Tests for the X-Hub-Signature-256 verifier. Run via ``npm test``
+ * (vitest). The signature verifier is the gate for an ENTIRE class
+ * of spoof attacks on our webhook (forged delivery statuses + forged
  * inbound messages). Every defensive branch matters: missing
  * secret, missing header, malformed prefix, length mismatch, hex
  * decode failure, and most importantly — actual HMAC mismatch.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createHmac } from "node:crypto";
 
 import { verifyWhatsAppSignature } from "./whatsapp-signature";

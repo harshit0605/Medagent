@@ -49,6 +49,15 @@ export default async function DoctorsPage({
   searchParams: Promise<{ oauth?: string; detail?: string }>;
 }) {
   const params = await searchParams;
+  // Snapshot the wall clock once at render entry. Server components only
+  // render once per request, so a single reference time-anchors every
+  // "synced N min ago" badge below. Calling Date.now() inside JSX trips
+  // the React Compiler's impure-call rule (and would be a real source of
+  // re-render drift in a client component); hoisting it to a top-level
+  // const is the correct shape, but the lint rule can't tell server-only
+  // contexts apart from client ones so we suppress it for this single line.
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
   let doctors: Doctor[] = [];
   let error: string | null = null;
   try {
@@ -159,7 +168,7 @@ export default async function DoctorsPage({
                             <span
                               className={
                                 "text-[10px] " +
-                                (Date.now() -
+                                (nowMs -
                                   new Date(
                                     doc.gcal_last_synced_at,
                                   ).getTime() >
@@ -172,7 +181,7 @@ export default async function DoctorsPage({
                               synced{" "}
                               {(() => {
                                 const diff = Math.round(
-                                  (Date.now() -
+                                  (nowMs -
                                     new Date(
                                       doc.gcal_last_synced_at,
                                     ).getTime()) /
