@@ -30,6 +30,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
+from app.logging_redact import redact_phone
+
 log = logging.getLogger(__name__)
 
 RESCUE_METRIC_KEY = "rescue_inhaler_puffs"
@@ -276,7 +278,7 @@ async def handle_trigger_log(
         "diary — spotting patterns helps your care team adjust your plan."
     )
     # Don't log the trigger free-text (clinical content) at INFO.
-    log.info("asthma trigger logged for %s", patient_phone)
+    log.info("asthma trigger logged for %s", redact_phone(patient_phone))
     return {"response_body": body, "audit_reasons": ["asthma_trigger_log"]}
 
 

@@ -18,6 +18,8 @@ import logging
 import re
 from typing import Any
 
+from app.logging_redact import redact_phone
+
 log = logging.getLogger(__name__)
 
 WOUND_REVIEW_CATEGORY = "wound_review"
@@ -79,7 +81,7 @@ async def handle_wound_photo(
             )
         await db.commit()
 
-    log.info("wound photo queued for review: patient=%s", patient_phone)
+    log.info("wound photo queued for review: patient=%s", redact_phone(patient_phone))
     return {
         "response_body": (
             "Thanks — your wound photo is with the care team for review. "
