@@ -10,6 +10,7 @@ nothing outside this cluster references them.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -24,6 +25,8 @@ from app.db.repositories import ops_tickets as ops_tickets_repo
 from app.db.repositories import patients as patients_repo
 from app.db.repositories import scheduled_events as scheduled_events_repo
 from app.db.session import get_session
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -256,6 +259,19 @@ async def acknowledge_ops_ticket(
     )
     if ticket is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+    try:
+        from app.db.repositories import operator_actions as ops_audit
+
+        await ops_audit.record(
+            db,
+            operator_id=payload.actor or "ops",
+            action=ops_audit.ACTION_TICKET_ACK,
+            target_type="ticket",
+            target_id=str(ticket.id),
+            details={"notes": (payload.notes or "")[:500]} if payload.notes else {},
+        )
+    except Exception:
+        log.exception("operator audit failed for ticket_ack %s", ticket_id)
     await db.commit()
     return _ticket_to_dto(ticket)
 
@@ -275,6 +291,19 @@ async def resolve_ops_ticket(
     )
     if ticket is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+    try:
+        from app.db.repositories import operator_actions as ops_audit
+
+        await ops_audit.record(
+            db,
+            operator_id=payload.actor or "ops",
+            action=ops_audit.ACTION_TICKET_RESOLVE,
+            target_type="ticket",
+            target_id=str(ticket.id),
+            details={"notes": (payload.notes or "")[:500]} if payload.notes else {},
+        )
+    except Exception:
+        log.exception("operator audit failed for ticket_resolve %s", ticket_id)
     await db.commit()
     return _ticket_to_dto(ticket)
 

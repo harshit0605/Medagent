@@ -1840,6 +1840,50 @@ class Household(TimestampMixin, Base):
     )
 
 
+class OperatorAction(Base):
+    """Append-only per-operator audit log.
+
+    Distinct from ``audit_records`` (workflow decisions). Every privileged
+    operator action — DSAR export, erasure trigger, ticket lifecycle change,
+    care-plan exemption grant — writes one row keyed by
+    ``(operator_id, action, target_type, target_id)``. Lets us answer
+    "what did operator X do this week?" with a single index scan instead
+    of grepping JSONB on the workflow audit.
+
+    Migration 0050. Operator-id is caller-asserted under the shared-API-key
+    model (the ``X-Ops-Actor`` header); HMAC-signed identity is a follow-up.
+    """
+
+    __tablename__ = "operator_actions"
+    __table_args__ = (
+        Index(
+            "ix_operator_actions_operator_logged",
+            "operator_id",
+            "logged_at",
+        ),
+        Index(
+            "ix_operator_actions_target",
+            "target_type",
+            "target_id",
+            "logged_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    details: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    logged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 class ProcessedInboundMessage(Base):
     """Inbound-message dedupe ledger.
 

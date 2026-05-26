@@ -18,6 +18,7 @@ though it physically sat between these endpoints before extraction.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -45,6 +46,8 @@ from services.orchestrator.routers._dtos import (
     _lab_to_dto,
     _regimen_to_dto,
 )
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -579,6 +582,19 @@ async def pause_bot_endpoint(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="patient not found")
+    try:
+        from app.db.repositories import operator_actions as ops_audit
+
+        await ops_audit.record(
+            db,
+            operator_id=payload.actor,
+            action=ops_audit.ACTION_PATIENT_PAUSE,
+            target_type="patient",
+            target_id=patient_id,
+            details={"reason": payload.reason},
+        )
+    except Exception:  # noqa: BLE001 — never block a successful action
+        log.exception("operator audit failed for patient_pause %s", patient_id)
     await db.commit()
     return await get_patient_detail(patient_id, db)
 
@@ -589,6 +605,7 @@ async def pause_bot_endpoint(
 )
 async def unpause_bot_endpoint(
     patient_id: int,
+    x_ops_actor: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> PatientDetailDTO:
     """Clear the ops-initiated bot pause. Outbound resumes on the
@@ -597,6 +614,19 @@ async def unpause_bot_endpoint(
     row = await patients_repo.unpause_bot(db, patient_id)
     if row is None:
         raise HTTPException(status_code=404, detail="patient not found")
+    try:
+        from app.db.repositories import operator_actions as ops_audit
+
+        await ops_audit.record(
+            db,
+            operator_id=(x_ops_actor or "ops").strip()[:128],
+            action=ops_audit.ACTION_PATIENT_UNPAUSE,
+            target_type="patient",
+            target_id=patient_id,
+            details={},
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("operator audit failed for patient_unpause %s", patient_id)
     await db.commit()
     return await get_patient_detail(patient_id, db)
 
@@ -646,6 +676,22 @@ async def erase_patient_endpoint(
     )
     if patient is None:
         raise HTTPException(status_code=404, detail="patient not found")
+    try:
+        from app.db.repositories import operator_actions as ops_audit
+
+        await ops_audit.record(
+            db,
+            operator_id=payload.actor,
+            action=ops_audit.ACTION_PATIENT_ERASURE,
+            target_type="patient",
+            target_id=patient_id,
+            details={
+                "reason": payload.reason,
+                "anonymized_phone": patient.phone,
+            },
+        )
+    except Exception:  # noqa: BLE001 — never block an erasure on audit
+        log.exception("operator audit failed for patient_erasure %s", patient_id)
     await db.commit()
 
     return {
@@ -712,6 +758,22 @@ async def export_patient_data(
     )
     if document is None:
         raise HTTPException(status_code=404, detail="patient not found")
+    try:
+        from app.db.repositories import operator_actions as ops_audit
+
+        await ops_audit.record(
+            db,
+            operator_id=resolved_actor,
+            action=ops_audit.ACTION_PATIENT_EXPORT,
+            target_type="patient",
+            target_id=patient_id,
+            details={
+                "window_days": window_days,
+                "header_actor": bool(x_ops_actor),
+            },
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("operator audit failed for patient_export %s", patient_id)
     await db.commit()
     return document
 
