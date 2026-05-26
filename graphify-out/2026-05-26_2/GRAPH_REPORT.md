@@ -1,16 +1,16 @@
 # Graph Report - Medagent  (2026-05-26)
 
 ## Corpus Check
-- 427 files · ~314,446 words
+- 420 files · ~312,054 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6239 nodes · 14236 edges · 390 communities (360 shown, 30 thin omitted)
-- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 2606 edges (avg confidence: 0.51)
+- 6186 nodes · 14141 edges · 373 communities (345 shown, 28 thin omitted)
+- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 2604 edges (avg confidence: 0.51)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a5fd6deb`
+- Built from commit: `be981246`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -332,26 +332,11 @@
 - [[_COMMUNITY_Community 369|Community 369]]
 - [[_COMMUNITY_Community 370|Community 370]]
 - [[_COMMUNITY_Community 371|Community 371]]
-- [[_COMMUNITY_Community 373|Community 373]]
-- [[_COMMUNITY_Community 374|Community 374]]
-- [[_COMMUNITY_Community 375|Community 375]]
-- [[_COMMUNITY_Community 376|Community 376]]
-- [[_COMMUNITY_Community 377|Community 377]]
-- [[_COMMUNITY_Community 378|Community 378]]
-- [[_COMMUNITY_Community 379|Community 379]]
-- [[_COMMUNITY_Community 380|Community 380]]
-- [[_COMMUNITY_Community 381|Community 381]]
-- [[_COMMUNITY_Community 382|Community 382]]
-- [[_COMMUNITY_Community 383|Community 383]]
-- [[_COMMUNITY_Community 384|Community 384]]
-- [[_COMMUNITY_Community 385|Community 385]]
-- [[_COMMUNITY_Community 386|Community 386]]
-- [[_COMMUNITY_Community 387|Community 387]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `get_sessionmaker()` - 559 edges
-2. `Patient` - 199 edges
-3. `AppointmentStatus` - 198 edges
+1. `get_sessionmaker()` - 556 edges
+2. `AppointmentStatus` - 198 edges
+3. `Patient` - 197 edges
 4. `ScheduledEvent` - 197 edges
 5. `Doctor` - 193 edges
 6. `OpsTicket` - 184 edges
@@ -363,24 +348,24 @@
 ## Surprising Connections (you probably didn't know these)
 - `test_check_dates_sorted_and_complete()` --calls--> `next`  [INFERRED]
   tests/test_post_op.py → apps/ops_console/package.json
-- `test_milestone_dates_sorted_and_anchored()` --calls--> `next`  [INFERRED]
-  tests/test_pregnancy.py → apps/ops_console/package.json
 - `test_threshold_triggering_opens_alert_and_routes_high_risk()` --calls--> `Medagent`  [EXTRACTED]
   tests/test_flow.py → README.md
 - `test_engine_rejects_invalid_threshold_and_action()` --calls--> `Medagent`  [EXTRACTED]
   tests/test_flow.py → README.md
 - `test_miss_recovery_reason_routes_to_correct_actions()` --calls--> `Medagent`  [EXTRACTED]
   tests/test_flow.py → README.md
+- `test_refill_forecast_stages_and_prompt_send()` --calls--> `Medagent`  [EXTRACTED]
+  tests/test_flow.py → README.md
 
-## Communities (390 total, 30 thin omitted)
+## Communities (373 total, 28 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.12
-Nodes (173): BaseModel, AppointmentStatus, BroadcastSend, Doctor, DoctorOAuthStatus, InboundClassification, LabFollowup, OpsTicket (+165 more)
+Cohesion: 0.14
+Nodes (159): BaseModel, AppointmentStatus, BroadcastSend, Doctor, DoctorOAuthStatus, InboundClassification, LabFollowup, OpsTicket (+151 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.02
-Nodes (149): PatientSummary, acknowledge_ops_ticket(), add_ops_ticket_note(), _api_key_auth(), assign_ops_ticket(), assign_patient_cohort_tag(), _assignment_to_dto(), _auth_exempt() (+141 more)
+Nodes (146): acknowledge_ops_ticket(), add_ops_ticket_note(), _api_key_auth(), assign_ops_ticket(), assign_patient_cohort_tag(), _assignment_to_dto(), _auth_exempt(), book_doctor_appointment() (+138 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.07
@@ -391,16 +376,16 @@ Cohesion: 0.05
 Nodes (68): _booking_agent_node(), Run one turn of the booking ReAct loop.      Delegates to :mod:`services.orchest, Run one turn of the booking ReAct loop.      Delegates to :mod:`services.orchest, _build_chat_history(), _build_slot_list_rows(), _buttons_for_completion(), _detect_reschedule_target(), _fmt_local() (+60 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.05
-Nodes (90): ChannelType, EventType, Intent, MessageCategory, MessageContentType, MessageMode, ActionButton, ChannelMetadata (+82 more)
+Cohesion: 0.08
+Nodes (65): ChannelType, EventType, Intent, MessageCategory, MessageContentType, MessageMode, ActionButton, ChannelMetadata (+57 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.11
-Nodes (24): Returns (patient_id, phone, goal_id)., Returns (patient_id, phone, goal_id)., ``values_with_offsets`` is [(value, days_ago), ...]., ``values_with_offsets`` is [(value, days_ago), ...]., Running the sweep twice on the same drifting goal must     NOT open a second tic, Running the sweep twice on the same drifting goal must     NOT open a second tic, First sweep finds the goal slipping → opens a ticket.     Patient records a new, First sweep finds the goal slipping → opens a ticket.     Patient records a new (+16 more)
+Cohesion: 0.07
+Nodes (45): _make_goal(), _make_obs(), Integration tests for the goal drift sweep (slice 17).  The drift evaluator is p, Even if older values were off-target, the most recent     on-target observation, The doctor's most concerning case: patient WAS on     target, but the latest rea, All recent observations off-target. Different from     slipping — patient never, Off-target observations from > 14 days ago classify as     ``stale``, not ``pers, Goals like 'exercise > 150 min/week' compare in the     opposite direction. Make (+37 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.10
-Nodes (40): DRIFT_BADGE, formatComparator(), formatRelative(), GoalCard(), METRIC_HINTS, PatientGoalsSection(), STATUS_TONE, adherenceTone() (+32 more)
+Cohesion: 0.12
+Nodes (35): DRIFT_BADGE, formatComparator(), formatRelative(), GoalCard(), METRIC_HINTS, PatientGoalsSection(), STATUS_TONE, addCaregiverAction() (+27 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.07
@@ -419,8 +404,8 @@ Cohesion: 0.07
 Nodes (51): _make_aggregation_rows(), _patch(), Unit tests for the adherence-drop alerter.  The DB-side aggregation is mocked at, 3 of 10 doses taken (30% rate) with completed=10 ≥ floor →     open one ticket., 1 of 3 doses taken (33% rate) is below threshold but the     completed count (3), Subsequent sweep while still depressed → re-note the     existing ticket with th, Patient recovered to 80% (above default 75% recovery     threshold) and has an o, High adherence rate + no existing ticket → do nothing.     Sweep must NOT try to (+43 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.05
-Nodes (64): get_sessionmaker(), Integration tests for the operator_actions audit log.  Verifies: - The repo writ, _seed_patient(), test_dsar_export_writes_audit(), test_list_for_target_scopes_correctly(), test_patient_pause_writes_audit(), test_patient_unpause_writes_audit(), test_record_and_list_for_operator() (+56 more)
+Cohesion: 0.04
+Nodes (89): get_sessionmaker(), Integration smoke for the caregiver dose-reminder fan-out repo + handler.  Verif, End-to-end: caregiver's phone TAKEN reply attributes the action via     confirma, Returns (patient_id, patient_phone, caregiver_phone)., A caregiver phone registered for patient A should NOT match a lookup     scoped, _seed_patient_with_caregiver(), test_dose_handler_records_caregiver_attribution(), test_find_active_confirmed_by_phone_scopes_to_patient() (+81 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.08
@@ -432,27 +417,27 @@ Nodes (32): _evaluate_policy_decision(), _NoOpAuditTrail, _policy_node(), Audit 
 
 ### Community 14 - "Community 14"
 Cohesion: 0.04
-Nodes (67): Patient, test_endpoint_create_then_revoke(), Integration smoke for the caregiver dose-reminder fan-out repo + handler.  Verif, End-to-end: caregiver's phone TAKEN reply attributes the action via     confirma, Returns (patient_id, patient_phone, caregiver_phone)., A caregiver phone registered for patient A should NOT match a lookup     scoped, _seed_patient_with_caregiver(), test_dose_handler_records_caregiver_attribution() (+59 more)
+Nodes (65): Patient, _cleanup(), _make_appointment(), _make_doctor_and_patient(), Integration tests for appointment reminder materialize / cancel.  Hits the real, test_cancel_marks_pending_reminders_skipped(), test_cancel_only_touches_matching_appointment(), test_materialize_creates_two_pending_reminders() (+57 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.05
-Nodes (55): Alert, Appointment, AppointmentRecap, Base, MetricObservation, PatientCohortTag, A measured / reported value at a point in time.      Optionally tied to a ``Care, A measured / reported value at a point in time.      Optionally tied to a ``Care (+47 more)
+Cohesion: 0.06
+Nodes (50): AppointmentRecap, OpsTicketStatus, Doctor-authored, LLM-polished after-visit recap sent to the patient     over Wha, Doctor-authored, LLM-polished after-visit recap sent to the patient     over Wha, Integration tests for the doctor pre-visit summary endpoint.  Builds a patient w, Ensure the prior-recap excerpt skips a recap on the SAME     appointment we're p, Build a patient + everything the pre-visit endpoint joins. Returns     (appointm, _seed_full_pre_visit_fixture() (+42 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.13
-Nodes (22): Integration tests for clinical-alert detection + endpoints.  End-to-end against, Double-clicking the ack button shouldn't change the     actor or timestamp on th, A doctor can resolve directly without intermediate ack     (e.g. they recognised, Ack first, then resolve — the resolver's name shouldn't     overwrite the acknow, Default test env has LLM_ENABLED=0 — the classifier     must return severity=non, ALERT_SEVERITIES governs whether an alert row is     written. Low / medium / non, Severity must be high or critical — alerts only fire     for those tiers. The cl, _seed_alert() (+14 more)
+Cohesion: 0.06
+Nodes (40): _FakeAsyncCompletions, _FakeChat, _FakeChoice, _FakeClient, _FakeCompletion, _FakeLLM, _FakeMessage, _FakeUsage (+32 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.07
-Nodes (56): AlertLifecycle, AlertSeverity, AppointmentFollowup, FollowupStatus, HumanQueueItem, MissReason, MissRecoveryAction, MissRecoveryEvent (+48 more)
+Cohesion: 0.08
+Nodes (50): MissRecoveryAction, VerificationStatus, AnalyticsSnapshot, AnalyticsTimeseries, Dashboard, ProgramMetrics, get_ops_analytics(), Program-level outcome snapshot — adherence, recap funnel, inbox     composition, (+42 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.09
 Nodes (36): Integration tests for the unified per-patient timeline.  End-to-end against real, Inbound + outbound messages within window appear,     sorted newest-first., Events outside [since, until] are excluded., ``kinds`` parameter restricts the output to listed kinds., Patient confirmed at a different time than scheduled —     the timeline should s, Missed doses have no confirmed_at — their occurrence     timestamp must be the s, Side-effect ops tickets surface as ``side_effect`` events     with the patient q, A single lab row that's been booked, completed, AND     reviewed within the wind (+28 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.35
-Nodes (13): _patch_session(), _patient(), Unit tests for the recap quick-reply handler and the deterministic recap rendere, Patient says 'OK' but has no pending recap — handler returns     None so the inb, Patient says 'OK' but has no pending recap — handler returns     None so the inb, _recap(), _stub_repos(), test_cross_patient_refused() (+5 more)
+Cohesion: 0.15
+Nodes (22): Template-based renderer used as the LLM fallback. Kept simple and     structural, render_deterministic(), _render_med_line(), _NoopAsyncSession, _patch_session(), _patient(), Unit tests for the recap quick-reply handler and the deterministic recap rendere, Patient says 'OK' but has no pending recap — handler returns     None so the inb (+14 more)
 
 ### Community 20 - "Community 20"
 Cohesion: 0.07
@@ -463,20 +448,20 @@ Cohesion: 0.08
 Nodes (30): _FakeAsyncCompletions, _FakeChat, _FakeChoice, _FakeClient, _FakeCompletion, _FakeLLM, _FakeMessage, _FakeUsage (+22 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.18
-Nodes (19): _extract_reported_text(), Pull the verbatim patient-said block out of a side_effect_report     ticket's no, _extract_reported_text(), Pull the verbatim patient-said block back out of a side_effect_report     ticket, Unit tests for the side-effect history extraction helper.  The helper parses tic, Marker present, but the only "quote" line is empty → None., Various ``>``-quote indentations should all collapse to the     bare text. Inden, A patient might send a multi-line message that the handler     wrote across mult (+11 more)
+Cohesion: 0.16
+Nodes (21): ``side_effect_report`` tickets opened in the last 24h for     the doctor's panel, _side_effect_section(), _extract_reported_text(), Pull the verbatim patient-said block out of a side_effect_report     ticket's no, _extract_reported_text(), Pull the verbatim patient-said block back out of a side_effect_report     ticket, Unit tests for the side-effect history extraction helper.  The helper parses tic, Marker present, but the only "quote" line is empty → None. (+13 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.09
-Nodes (15): DashboardPage(), pct(), FLOW_ACTION_OPTIONS, RECORD_TYPE_OPTIONS, createBroadcastCampaignAction(), str(), COHORTS, AlertCompactCard() (+7 more)
+Cohesion: 0.10
+Nodes (13): DashboardPage(), pct(), FLOW_ACTION_OPTIONS, RECORD_TYPE_OPTIONS, AlertCompactCard(), formatRelative(), PatientClinicalAlerts(), STATUS_TONE (+5 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.06
-Nodes (44): _compose(), _compose_node(), _compose_rules(), _default_human_handoff(), _detect_intent(), _detect_intent_node(), _detect_intent_rules(), _ingest_node() (+36 more)
+Cohesion: 0.08
+Nodes (34): _compose(), _compose_node(), _compose_rules(), _default_human_handoff(), _detect_intent(), _detect_intent_node(), _detect_intent_rules(), _ingest_node() (+26 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.05
-Nodes (37): COMPONENT_LABEL, TONE_BADGE, TONE_LABEL, AuditRecord, AvailabilitySlot, backendUrls, BroadcastCampaign, BroadcastCampaignDetail (+29 more)
+Cohesion: 0.06
+Nodes (33): AuditRecord, AvailabilitySlot, backendUrls, BroadcastCampaign, BroadcastCampaignDetail, BroadcastSend, CarePlanGoalComparator, DashboardAlerts (+25 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.10
@@ -495,12 +480,12 @@ Cohesion: 0.09
 Nodes (26): _FakeAsyncCompletions, _FakeChat, _FakeChoice, _FakeClient, _FakeCompletion, _FakeLLM, _FakeMessage, _FakeUsage (+18 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.19
-Nodes (12): Order, A medication reorder routed to a fulfillment partner.      Created when a patien, create(), get(), get_open_for_regimen(), propose_substitution(), Order (refill execute) persistence.  Thin repo behind the partner / refill execu, Record a partner-proposed substitution pending patient approval. (+4 more)
+Cohesion: 0.10
+Nodes (32): Alert, AlertLifecycle, AlertSeverity, AppointmentFollowup, Base, CarePlanGoal, HumanQueueItem, MetricObservation (+24 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.11
-Nodes (27): _FakeLLM, Integration tests for the visit brief generator + endpoints.  End-to-end against, With LLM disabled (the default test env), the generator     still persists a row, Patient with zero dose events shouldn't divide-by-zero;     adherence_rate is No, Stub the LLM to return a known structured payload — the     generator must persi, When the LLM raises, the generator persists a failed     brief row + re-raises R, The LLM might return more talking_points / red_flags     than the cap allows — t, When two briefs land for the same appointment_id, the     older ones flip to ``s (+19 more)
+Cohesion: 0.05
+Nodes (73): AdherenceEvent, AdherenceStatus, Appointment, A scheduled appointment between a patient and a doctor.      Mirrors the Google, A scheduled appointment between a patient and a doctor.      Mirrors the Google, Integration tests for the adherence-drop sweep.  End-to-end against real Postgre, Even with 100% missed (worst possible rate), a 3-event     window is below the d, Two consecutive sweeps over the same dropping patient must     produce ONE ticke (+65 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.05
@@ -515,8 +500,8 @@ Cohesion: 0.12
 Nodes (26): End-to-end integration tests for the caregiver inbound consent handler against a, Re-tap of YES on an already-confirmed caregiver returns the     "already confirm, Phone with no pending caregiver row → handler returns None so     the orchestrat, Create a fresh patient + pending caregiver. Returns     (patient_id, caregiver_i, _seed_pending_caregiver(), test_marker_form_confirms_with_id_hint_e2e(), test_no_declines_pending_caregiver_e2e(), test_yes_after_confirm_is_idempotent_e2e() (+18 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.09
-Nodes (31): ErasePatientButton(), Props, ExportPatientButton(), Props, safeFilenamePart(), todayIso(), erasePatientAction(), exportPatientAction() (+23 more)
+Cohesion: 0.11
+Nodes (26): ErasePatientButton(), Props, erasePatientAction(), ADHERENCE_BADGE, formatDate(), PatientDetailPage(), AdherenceEventEntry, Caregiver (+18 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.15
@@ -527,16 +512,16 @@ Cohesion: 0.07
 Nodes (43): _adherence_pattern_sweep_seconds(), _calendar_sync_sweep_seconds(), _care_gap_sweep_seconds(), _clinical_alert_repage_sweep_seconds(), _delivery_alert_sweep_seconds(), _delivery_template_alert_sweep_seconds(), _dose_materialize_seconds(), emit_dose_due() (+35 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.16
-Nodes (20): ClinicalAlert, Patient-safety alert for clinically urgent inbound     messages. Created by the, Patient-safety alert for clinically urgent inbound     messages. Created by the, Patient-safety alert created by the triage classifier     on inbound messages. S, acknowledge(), count_by_status(), create(), get() (+12 more)
+Cohesion: 0.14
+Nodes (16): acknowledge(), count_by_status(), create(), get(), list_for_patient(), list_recent(), list_unacked_for_repage(), mark_paged() (+8 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.12
-Nodes (26): MessageDirection, MessageLog, MessagePayloadKind, DeliverySummary, check_inbound_rate_limit(), _limit(), RateLimitResult, Per-patient inbound rate limiting.  Without this, a patient (or a misbehaving Wh (+18 more)
+Cohesion: 0.17
+Nodes (18): MessageDirection, MessageLog, MessagePayloadKind, check_inbound_rate_limit(), _limit(), RateLimitResult, Per-patient inbound rate limiting.  Without this, a patient (or a misbehaving Wh, Rich return value so the caller can both decide AND log     structured details. (+10 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.11
-Nodes (27): CarePlanGoal, Quantitative goal a doctor sets for a specific patient.      Distinct from ``Car, Quantitative goal a doctor sets for a specific patient.      Distinct from ``Car, Per-patient quantitative goal. Distinct from     ``CarePlanDTO`` (cohort-level t, create_goal(), evaluate_drift_status(), get_goal(), list_all_active_goals() (+19 more)
+Cohesion: 0.10
+Nodes (21): create_goal(), evaluate_drift_status(), get_goal(), list_all_active_goals(), list_goals_for_patient(), list_observations_for_goal(), list_observations_for_patient(), meets_consecutive_target() (+13 more)
 
 ### Community 41 - "Community 41"
 Cohesion: 0.09
@@ -547,8 +532,8 @@ Cohesion: 0.11
 Nodes (21): _appointment(), _patch_sync(), Unit tests for the inbound calendar-sync sweep.  The Google Calendar API call +, Doctor deletes an event in Calendar → our matching     appointment goes to ``can, Sweep re-runs over a cancellation we already applied →     counted as ``skipped_, Doctor drags an event to a new time in Calendar → our     appointment's schedule, Sweep sees an event whose start/end already match our DB     → no-op. Without th, An event from the doctor's calendar that ISN'T in our     appointments table (i. (+13 more)
 
 ### Community 43 - "Community 43"
-Cohesion: 0.06
-Nodes (29): eslintConfig, dependencies, chat, @chat-adapter/state-memory, @chat-adapter/whatsapp, react, react-dom, devDependencies (+21 more)
+Cohesion: 0.07
+Nodes (27): eslintConfig, dependencies, chat, @chat-adapter/state-memory, @chat-adapter/whatsapp, react, react-dom, devDependencies (+19 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.15
@@ -556,7 +541,7 @@ Nodes (25): formatDateTime(), formatRelative(), PRIORITY_BADGE, Props, TicketAct
 
 ### Community 45 - "Community 45"
 Cohesion: 0.16
-Nodes (28): detailLink(), formatRelative(), isExternalLink(), KIND_STYLE, PatientTimeline(), AdherenceStatus, PatientTimeline, TimelineEvent (+20 more)
+Nodes (27): detailLink(), formatRelative(), isExternalLink(), KIND_STYLE, PatientTimeline(), PatientTimeline, TimelineEvent, TimelineEventKind (+19 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.08
@@ -571,8 +556,8 @@ Cohesion: 0.13
 Nodes (30): _build_freeform_body(), _build_interactive_buttons_body(), _build_interactive_list_body(), _build_template_body(), _graph_url(), _is_dry_run(), _is_retryable_send_error(), MetaSendResult (+22 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.11
-Nodes (28): Caregiver, Family member / care contact authorised to receive copies of     selected patien, Family member / care contact authorised to receive copies of     selected patien, confirm_consent(), create(), decline_consent(), _ensure_utc(), find_active_confirmed_by_phone() (+20 more)
+Cohesion: 0.06
+Nodes (49): Caregiver, Family member / care contact authorised to receive copies of     selected patien, Family member / care contact authorised to receive copies of     selected patien, Integration tests for the patient right-of-erasure flow.  End-to-end against rea, The patient row's PII fields must be overwritten in     place. Reading back via, Defense-in-depth: missing or false ``confirm`` must 400.     A misclick on the U, The pydantic model requires non-empty actor + reason. The     audit trail is the, Caregiver rows linked to the erased patient must have     their full_name + phon (+41 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.13
@@ -595,12 +580,12 @@ Cohesion: 0.13
 Nodes (23): acknowledgeClinicalAlertAction(), int(), pageClinicalAlertAction(), resolveClinicalAlertAction(), str(), AlertCard(), formatDateTime(), formatRelative() (+15 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.10
-Nodes (31): CarePlan, One standing-order care rule — "patients in cohort X get     test_name Y every c, One standing-order care rule — "patients in cohort X get     test_name Y every c, The batched count must equal a straight per-patient computation over     the SAM, test_overdue_care_gap_count_batched_equals_per_patient(), _patient_is_gap_for_diabetes_hba1c(), Per-patient gap check for the diabetes/HbA1c standing order.     Mirrors the gat, CarePlan (+23 more)
+Cohesion: 0.11
+Nodes (29): FollowupStatus, The batched count must equal a straight per-patient computation over     the SAM, test_overdue_care_gap_count_batched_equals_per_patient(), _patient_is_gap_for_diabetes_hba1c(), Per-patient gap check for the diabetes/HbA1c standing order.     Mirrors the gat, CarePlan, _ensure_utc(), _from_row() (+21 more)
 
 ### Community 56 - "Community 56"
-Cohesion: 0.07
-Nodes (25): Integration tests for the program-level /ops/analytics endpoint and the underlyi, The cutoff is `now - days`, exclusive of older rows. Smoke     test: a 1-day win, The cutoff is `now - days`, exclusive of older rows. Smoke     test: a 1-day win, ack_rate = acknowledged / (sent + acknowledged + questioned).     Drafts must NO, No resolved tickets in window → median is None, not 0 or NaN., Even on a quiet day, every date in the window must appear so     the sparkline h, No resolved tickets in window → median is None, not 0 or NaN., Each bucket has the four urgency keys + total. Total == sum of     urgency keys (+17 more)
+Cohesion: 0.06
+Nodes (27): Integration tests for the program-level /ops/analytics endpoint and the underlyi, The cutoff is `now - days`, exclusive of older rows. Smoke     test: a 1-day win, The cutoff is `now - days`, exclusive of older rows. Smoke     test: a 1-day win, A DRAFT recap must not count toward the funnel denominator     (``sent_total`` =, ack_rate = acknowledged / (sent + acknowledged + questioned).     Drafts must NO, No resolved tickets in window → median is None, not 0 or NaN., Even on a quiet day, every date in the window must appear so     the sparkline h, No resolved tickets in window → median is None, not 0 or NaN. (+19 more)
 
 ### Community 57 - "Community 57"
 Cohesion: 0.10
@@ -615,16 +600,16 @@ Cohesion: 0.21
 Nodes (11): _create_patient(), Integration tests for the side-effect history surface on the patient detail endp, End-to-end: handler opens a side_effect_report ticket →     GET /patients/{id} s, A patient who has never reported a side effect must see an     empty list (not n, Multiple reports → newest first. A doctor scanning the     timeline cares about, Create a fresh patient and return (id, phone). Phone has the     test prefix so, The new ``list_for_patient_by_category`` returns ONLY the     tickets matching b, test_list_for_patient_by_category_filters_by_category() (+3 more)
 
 ### Community 60 - "Community 60"
-Cohesion: 0.18
-Nodes (12): TriageDecisionRecord, DoseDueEvent, OpsTicket, Simple stage forecaster for D-7 / D-3 / D-1 reminder ladder., Simple cohort-aware triage classifier for safety-first routing., RefillForecast, RefillForecaster, Scheduler (+4 more)
+Cohesion: 0.16
+Nodes (12): AppointmentJourney, DoseDueEvent, LabJourney, Simple stage forecaster for D-7 / D-3 / D-1 reminder ladder., Simple cohort-aware triage classifier for safety-first routing., RefillForecast, RefillForecaster, Scheduler (+4 more)
 
 ### Community 61 - "Community 61"
 Cohesion: 0.06
 Nodes (41): erase_patient_endpoint(), Set the patient's preferred language. Validated against the     SUPPORTED_LANGUA, Right-of-erasure endpoint. Anonymizes the patient row +     all PII-bearing rela, _anonymized_phone(), erase_patient_data(), Generate a unique anonymized replacement for the phone     column. The DB enforc, Generate a unique anonymized replacement for the phone     column. The DB enforc, Run the full erasure flow for a patient. Returns the     anonymized ``Patient`` (+33 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.12
-Nodes (28): _cleanup(), _make_patient_and_regimen(), Integration tests for dose reminder materialize / cancel against the DB.  Covers, test_cancel_for_regimen_skips_pending_dose_events(), test_materialize_creates_paired_adherence_and_scheduled_rows(), test_materialize_is_idempotent_on_repeated_runs(), compute_dose_occurrences(), _ensure_utc() (+20 more)
+Cohesion: 0.05
+Nodes (55): _cleanup(), _make_patient_and_regimen(), Integration tests for dose reminder materialize / cancel against the DB.  Covers, test_cancel_for_regimen_skips_pending_dose_events(), test_materialize_creates_paired_adherence_and_scheduled_rows(), test_materialize_is_idempotent_on_repeated_runs(), cancel_for_regimen(), compute_dose_occurrences() (+47 more)
 
 ### Community 63 - "Community 63"
 Cohesion: 0.15
@@ -647,8 +632,8 @@ Cohesion: 0.16
 Nodes (22): _adherence(), _NoopAsyncSession, _past(), _patient(), Unit tests for the missed-dose sweep + escalation module.  The repos are stubbed, With 3 consecutive misses on the same regimen, an ops_ticket fires., One row that errors during marking must not abort the whole pass — the     other, Even with one fresh miss, if the previous dose was Taken the streak     is broke (+14 more)
 
 ### Community 68 - "Community 68"
-Cohesion: 0.09
-Nodes (33): is_required(), HMAC-SHA256 signing for the ``X-Ops-Actor`` header.  The current shared-API-key, Return the lowercase-hex HMAC-SHA256 signature for ``actor``., Constant-time compare a candidate signature against the expected one.      Retur, Whether the orchestrator should reject unsigned ops-actor headers., Shared-secret HMAC key, or empty string when unset.      Production: set ``OPS_A, sign(), signing_key() (+25 more)
+Cohesion: 0.12
+Nodes (22): ClassifierOutput, classify_inbound(), deterministic_for_action_tap(), is_action_tap(), Doctor-inbox triage classifier.  Runs an LLM pass over a freeform inbound messag, Tap-routed messages have a structured marker prefix. Skip the     LLM and persis, Tap-routed messages have a structured marker prefix. Skip the     LLM and persis, Constant classification for marker-prefixed inbounds — no LLM     needed since t (+14 more)
 
 ### Community 69 - "Community 69"
 Cohesion: 0.13
@@ -679,12 +664,12 @@ Cohesion: 0.11
 Nodes (27): _care_gap_sweep_loop(), _clinical_alert_repage_sweep_loop(), _dose_materialize_loop(), _goal_drift_sweep_loop(), _heartbeat_details_safe(), Persist a heartbeat for ``component``. Wrapped — heartbeat     writes must NEVER, Normalise heartbeat details to a JSON-friendly dict. Some loops     return neste, Persist a heartbeat for ``component``. Wrapped — heartbeat     writes must NEVER (+19 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.14
-Nodes (17): formatDateTime(), PrescriptionDetailPage(), STATUS_TONE, ParsedRegimen, Prescription, get_prescription(), list_prescriptions(), _prescription_to_dto() (+9 more)
+Cohesion: 0.31
+Nodes (9): formatDateTime(), PrescriptionDetailPage(), STATUS_TONE, ParsedRegimen, reject_prescription(), verify_prescription(), parseTimesOfDay(), rejectPrescriptionAction() (+1 more)
 
 ### Community 77 - "Community 77"
-Cohesion: 0.13
-Nodes (23): AvailabilityDTO, book_doctor_appointment(), CalendarEventDTO, create_doctor(), DigestAppointmentDTO, DigestRecapDraftDTO, DigestSideEffectDTO, DigestTicketDTO (+15 more)
+Cohesion: 0.12
+Nodes (31): AvailabilityDTO, book_doctor_appointment(), BookAppointmentRequest, CalendarEventDTO, create_doctor(), DigestAppointmentDTO, DigestRecapDraftDTO, DigestSideEffectDTO (+23 more)
 
 ### Community 78 - "Community 78"
 Cohesion: 0.25
@@ -703,8 +688,8 @@ Cohesion: 0.17
 Nodes (15): _NoopAsyncSession, _patch_session(), _patient(), Unit tests for the orchestrator prescription handler.  Covers marker detection,, Patch the repos prescription_handler reaches for. Returns a captured-     calls, Patch the repos prescription_handler reaches for. Returns a captured-     calls, Build a ParsePrescriptionResult-shaped namespace., Build a ParsePrescriptionResult-shaped namespace. (+7 more)
 
 ### Community 82 - "Community 82"
-Cohesion: 0.14
-Nodes (44): _adherence_summary(), AdherenceSummaryDTO, AppointmentDTO, LabFollowupDTO, PatientSummaryDTO, Lightweight row for the patients list page.      Shared by the /patients listing, Roll a list of adherence events up into the summary DTO.      Duck-typed over th, Shared by the doctor/appointments router (get_appointment) and the     pre-visit (+36 more)
+Cohesion: 0.20
+Nodes (30): _adherence_summary(), AdherenceSummaryDTO, LabFollowupDTO, PatientSummaryDTO, Shared DTOs used across multiple orchestrator routers.  ``LabFollowupDTO`` / ``R, Lightweight row for the patients list page.      Shared by the /patients listing, Roll a list of adherence events up into the summary DTO.      Duck-typed over th, RegimenDTO (+22 more)
 
 ### Community 83 - "Community 83"
 Cohesion: 0.20
@@ -716,7 +701,7 @@ Nodes (19): orchestrator_client(), Integration tests for the bot-reply quality f
 
 ### Community 85 - "Community 85"
 Cohesion: 0.16
-Nodes (13): LabJourney, agent_workflow.py, FastAPI, LangGraph, Medagent, ops_console, orchestrator, postgres + redis (+5 more)
+Nodes (13): OpsTicket, agent_workflow.py, FastAPI, LangGraph, Medagent, ops_console, orchestrator, postgres + redis (+5 more)
 
 ### Community 86 - "Community 86"
 Cohesion: 0.08
@@ -727,8 +712,8 @@ Cohesion: 0.22
 Nodes (12): _install(), Unit tests for the LLM-augmented agent workflow nodes (async).  These tests do N, Minimal stand-in for AgentLLM with hard-coded async behaviours., _StubLLM, test_disabled_llm_means_pure_rules(), test_llm_compose_failure_falls_back_to_canned(), test_llm_compose_replaces_canned_body(), test_llm_intent_failure_falls_back_to_rules() (+4 more)
 
 ### Community 88 - "Community 88"
-Cohesion: 0.10
-Nodes (26): _lab_handler_node(), Lab follow-up button taps — Booked / Completed / Need help. Pure     state-machi, Ensure a patients row exists for this WhatsApp wa_id. Stash the FK +     the onb, Ensure a patients row exists for this WhatsApp wa_id. Stash the FK +     the onb, Top-level pre-LLM router. STOP / START have HIGHEST priority —     a patient say, Lab follow-up button taps — Booked / Completed / Need help. Pure     state-machi, Top-level pre-LLM router. STOP / START have HIGHEST priority —     a patient say, _route_for_onboarding() (+18 more)
+Cohesion: 0.09
+Nodes (27): _lab_handler_node(), Lab follow-up button taps — Booked / Completed / Need help. Pure     state-machi, Ensure a patients row exists for this WhatsApp wa_id. Stash the FK +     the onb, Ensure a patients row exists for this WhatsApp wa_id. Stash the FK +     the onb, Top-level pre-LLM router. STOP / START have HIGHEST priority —     a patient say, Lab follow-up button taps — Booked / Completed / Need help. Pure     state-machi, Top-level pre-LLM router. STOP / START have HIGHEST priority —     a patient say, _route_for_onboarding() (+19 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.17
@@ -739,28 +724,28 @@ Cohesion: 0.18
 Nodes (13): _file_report(), Integration tests for side-effect analytics.  End-to-end against real Postgres b, Two patients, both report nausea — but only one names     metformin. The aggrega, A single common symptom across multiple reports should     bubble up in the top_, A patient in the diabetes cohort filing a report should     contribute to the di, Reports older than the analytics window must NOT count.     A report from 90 day, Create a patient + active regimens + return (id, phone)., Open a side_effect_report ticket with the given verbatim     text. The notes-for (+5 more)
 
 ### Community 91 - "Community 91"
-Cohesion: 0.16
-Nodes (20): generate_recap(), Produce the patient-facing recap message text.      Tries the LLM first; on any, _build_recap_context(), _fan_out_recap_to_caregivers(), _format_appointment_date_local(), get_appointment_recap(), _patient_in_recap_csw(), preview_appointment_recap() (+12 more)
+Cohesion: 0.10
+Nodes (27): gateway_auth_headers(), Shared-secret auth for the internal WhatsApp gateway.  The gateway's ``/send`` (, The ``x-api-key`` header for a server-to-server gateway call, or an     empty di, generate_recap(), Generator for after-visit patient recap WhatsApp messages.  The doctor authors s, Compact JSON-ish payload for the LLM to expand into the recap., Produce the patient-facing recap message text.      Tries the LLM first; on any, _RecapBody (+19 more)
 
 ### Community 92 - "Community 92"
 Cohesion: 0.14
 Nodes (26): CarePlanExemption, A patient-level opt-out from a specific standing-order care plan.      Active wh, A patient-level opt-out from a specific standing-order care plan.      Active wh, active_plan_ids_for_patient(), _active_predicate(), create(), _ensure_utc(), exempt_patient_ids_for_plan() (+18 more)
 
 ### Community 93 - "Community 93"
-Cohesion: 0.17
+Cohesion: 0.14
 Nodes (18): _compute_rate(), _drop_threshold(), _min_scheduled(), Adherence-drop pattern alerter.  Doctors look at the daily digest and see today', Rolling-window span for the rate computation. 7 days is     tight enough to catc, Return ``(rate, completed_count)`` matching the     ``_adherence_summary`` seman, One pass of the adherence-drop sweep. Walks all patients     with adherence even, Adherence-rate floor below which the alert opens. Default     60% — well below t (+10 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.19
-Nodes (14): _hba1c_plan_id(), Integration tests for patient-level care_plan_exemptions.  Covers the repo CRUD,, Patient-scoped: a freshly-seeded diabetic with no completion +     no followup I, Inverse: seed exempted (no gap) → revoke → gap reinstated.     Patient-scoped fo, The diabetes/HbA1c plan id, seeded by migration 0014., _seed_patient(), test_count_helper_excludes_exempted_patient(), test_create_then_revoke_lifecycle() (+6 more)
+Cohesion: 0.09
+Nodes (28): _hba1c_plan_id(), Integration tests for patient-level care_plan_exemptions.  Covers the repo CRUD,, Patient-scoped: a freshly-seeded diabetic with no completion +     no followup I, Inverse: seed exempted (no gap) → revoke → gap reinstated.     Patient-scoped fo, The diabetes/HbA1c plan id, seeded by migration 0014., _seed_patient(), test_count_helper_excludes_exempted_patient(), test_create_then_revoke_lifecycle() (+20 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 0.12
 Nodes (12): Unit tests for the side-effect / adverse-reaction inbound handler.  Repos are st, The ack MUST include emergency-services guidance — patients     reporting acute, The clinician needs to see what the PATIENT actually said,     not a paraphrase., Regimens are captured so the doctor doesn't have to look     them up. Without th, Empty regimens render an explicit ``(none on file)`` so the     clinician knows, Empty inbound shouldn't crash the renderer or leave a     trailing blank quote., _regimen(), test_render_english_ack_includes_emergency_guidance() (+4 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.22
-Nodes (10): _list_pending_for(), End-to-end scheduler tests against Supabase.  Skipped without DATABASE_URL. Disa, Seed a patient (phone=wa_id) + an active regimen; return     regimen_id. The dis, A mid-batch dispatch failure must NOT roll back marks for events     already dis, _seed_patient_and_regimen(), test_emit_dose_due_inserts_pending_row(), test_future_event_is_not_dispatched_until_due(), test_tick_commits_per_event_isolating_failures() (+2 more)
+Cohesion: 0.17
+Nodes (13): _list_pending_for(), End-to-end scheduler tests against Supabase.  Skipped without DATABASE_URL. Disa, Seed a patient (phone=wa_id) + an active regimen; return     regimen_id. The dis, A mid-batch dispatch failure must NOT roll back marks for events     already dis, Bring up the scheduler with the polling loop OFF so /scheduler/tick is the     o, Bring up the scheduler with the polling loop OFF so /scheduler/tick is the     o, scheduler_client(), _seed_patient_and_regimen() (+5 more)
 
 ### Community 97 - "Community 97"
 Cohesion: 0.15
@@ -775,12 +760,12 @@ Cohesion: 0.12
 Nodes (27): _asthma_handler_node(), Asthma self-report: rescue-inhaler use ("used my reliever 3 times") or     trigg, _aware(), handle_asthma_log(), handle_rescue_log(), handle_trigger_log(), looks_like_asthma_log(), looks_like_rescue_log() (+19 more)
 
 ### Community 100 - "Community 100"
-Cohesion: 0.22
-Nodes (3): Alert, HumanQueueItem, MissRecoveryEvent
+Cohesion: 0.12
+Nodes (9): metadata, is_retry, priority, tenant_id, Alert, HumanQueueItem, MissRecoveryEvent, OpsPrioritizer (+1 more)
 
 ### Community 101 - "Community 101"
-Cohesion: 0.17
-Nodes (3): AdherenceEngine, AppointmentJourney, GatewayMessage
+Cohesion: 0.14
+Nodes (3): AdherenceEngine, CaregiverDigest, GatewayMessage
 
 ### Community 102 - "Community 102"
 Cohesion: 0.20
@@ -795,16 +780,16 @@ Cohesion: 0.19
 Nodes (13): AuditRecord, audit_search(), _parse_search_dt(), Trimmed AuditRecord shape for the search UI. ``details`` is     a free-form dict, Parse a search-filter ISO datetime. Returns None for blank,     raises HTTPExcep, Filtered + paginated audit-records search. Powers the     ops-console /audit-sea, log_gateway_outbound(), log_patient_data_export() (+5 more)
 
 ### Community 105 - "Community 105"
-Cohesion: 0.09
-Nodes (27): cancel_for_regimen(), Mark every pending dose_due ScheduledEvent for this regimen as skipped     AND m, Mark every pending dose_due ScheduledEvent for this regimen as skipped     AND m, cancel_for_regimen(), count_snoozes_for_cycle(), _cycle_key(), _ensure_utc(), _list_pending_refills_for_regimen() (+19 more)
+Cohesion: 0.27
+Nodes (10): CohortStat, compute_side_effect_analytics(), _import_extractor(), MedicationStat, Side-effect frequency analytics — clinical pattern detection across the patient, Lazy import of the notes extractor. It lives in     ``side_effect_handler`` (alo, Aggregate side-effect reports across the panel into clinical     pattern signal., Aggregate side-effect reports across the panel into clinical     pattern signal. (+2 more)
 
 ### Community 106 - "Community 106"
-Cohesion: 0.12
-Nodes (18): _create_patient_with_data(), Integration tests for the DSAR patient-export endpoint.  End-to-end against a re, Every successful export must write an AuditRecord — that's     the regulator-tra, The X-Ops-Actor header (set by the ops console from the operator     session) ta, Out-of-range window_days must 400, not silently truncate.     A ``window_days=0`, Out-of-range window_days must 400, not silently truncate.     A ``window_days=0`, A short ``window_days`` should drop adherence/appointment/     recap rows older, A short ``window_days`` should drop adherence/appointment/     recap rows older (+10 more)
+Cohesion: 0.06
+Nodes (35): Integration tests for clinician-authored doctor replies.  Covers: - 404 when pat, Edge case: a Patient row with empty phone (shouldn't happen via     onboarding b, Edge case: a Patient row with empty phone (shouldn't happen via     onboarding b, Gateway returns no wamid → endpoint must surface a 502 so the     UI can show a, Gateway returns no wamid → endpoint must surface a 502 so the     UI can show a, Create a patient. If ``in_csw=True``, also seed an inbound-state     row dated n, Create a patient. If ``in_csw=True``, also seed an inbound-state     row dated n, Without a recent inbound, the CSW gate must reject the send so     the doctor se (+27 more)
 
 ### Community 107 - "Community 107"
-Cohesion: 0.15
-Nodes (14): _ensure_utc(), _find_appointments_missing_recap(), _find_unacked_recaps_due_for_nudge(), _has_existing_ack_nudge(), One pass: open ops tickets for appointments that should have a     recap but don, Recaps in ``sent`` (NOT ``acknowledged`` or ``questioned``) that     were sent m, Has the dispatcher already enqueued (or sent) an ack-nudge for     this recap? W, Enqueue a one-time ack-nudge ScheduledEvent for each recap whose     sent_at is (+6 more)
+Cohesion: 0.18
+Nodes (15): _ensure_utc(), _find_appointments_missing_recap(), _find_unacked_recaps_due_for_nudge(), _has_existing_ack_nudge(), Sweeps for the after-visit recap lifecycle.  Two passes, each idempotent and che, One pass: open ops tickets for appointments that should have a     recap but don, Recaps in ``sent`` (NOT ``acknowledged`` or ``questioned``) that     were sent m, Has the dispatcher already enqueued (or sent) an ack-nudge for     this recap? W (+7 more)
 
 ### Community 108 - "Community 108"
 Cohesion: 0.19
@@ -819,8 +804,8 @@ Cohesion: 0.29
 Nodes (12): getBot(), missingWhatsAppEnv(), bareHex, body, real, sign(), tampered, verifyWhatsAppSignature() (+4 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.27
-Nodes (10): draft_reply(), DraftReply, _LLMDraftBody, LLM-drafted doctor reply suggestions.  When ops opens an inbox row that needs a, Build a draft reply for ``inbound_text`` against this     patient's recent conte, Structured LLM output. Confidence + caveats are     self-reported by the model a, _serialise_alerts(), _serialise_regimens() (+2 more)
+Cohesion: 0.24
+Nodes (14): DraftReply, draft_reply(), DraftReply, _LLMDraftBody, LLM-drafted doctor reply suggestions.  When ops opens an inbox row that needs a, Build a draft reply for ``inbound_text`` against this     patient's recent conte, Structured LLM output. Confidence + caveats are     self-reported by the model a, _serialise_alerts() (+6 more)
 
 ### Community 112 - "Community 112"
 Cohesion: 0.24
@@ -828,7 +813,7 @@ Nodes (12): createCarePlanAction(), deactivateCarePlanAction(), int(), reactivat
 
 ### Community 113 - "Community 113"
 Cohesion: 0.11
-Nodes (11): _FakeAsyncCompletions, _FakeChat, _FakeChoice, _FakeClient, _FakeCompletion, _FakeLLM, _FakeMessage, _FakeUsage (+3 more)
+Nodes (15): ClinicalAlert, Patient-safety alert for clinically urgent inbound     messages. Created by the, Patient-safety alert for clinically urgent inbound     messages. Created by the, _FakeAsyncCompletions, _FakeChat, _FakeChoice, _FakeClient, _FakeCompletion (+7 more)
 
 ### Community 114 - "Community 114"
 Cohesion: 0.13
@@ -839,8 +824,8 @@ Cohesion: 0.20
 Nodes (15): _failure_threshold(), _min_volume(), Background sweep that turns the delivery-tracking metrics into actionable ops ti, One pass of the delivery alert sweep. Returns a counter dict     the scheduler l, Failure-rate above which we open a ticket. Default 10%. Below     this, blips an, Failure-rate at or below which we auto-resolve an open burst     ticket. Distinc, Minimum outbound volume in the window before we trust the rate.     5 sends in 3, How far back the rolling window looks. 30 min by default — long     enough that (+7 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.18
-Nodes (9): langgraph_orchestrator_client(), Integration tests for the compiled LangGraph workflow.  Skipped when DATABASE_UR, Confirm the conditional edge actually branches — non-critical inputs     must NO, Even when invoked outside the graph, PolicyGate via DbAuditTrail     correctly r, Bring the orchestrator app up with LANGGRAPH_ENABLED=1 for this module., The conditional edge sends critical messages through human_handoff,     which cr, test_critical_path_creates_ops_ticket_via_human_handoff(), test_non_critical_path_skips_human_handoff() (+1 more)
+Cohesion: 0.13
+Nodes (13): langgraph_orchestrator_client(), Integration tests for the compiled LangGraph workflow.  Skipped when DATABASE_UR, ``AsyncPostgresSaver.setup()`` must have created the checkpoint_* tables on, Confirm the conditional edge actually branches — non-critical inputs     must NO, The policy node uses DbAuditTrail; that should produce a     record_type='policy, Even when invoked outside the graph, PolicyGate via DbAuditTrail     correctly r, Bring the orchestrator app up with LANGGRAPH_ENABLED=1 for this module., The conditional edge sends critical messages through human_handoff,     which cr (+5 more)
 
 ### Community 117 - "Community 117"
 Cohesion: 0.27
@@ -859,8 +844,8 @@ Cohesion: 0.17
 Nodes (12): LlmCallLog, One row per OpenAI API call. Powers cost + latency     analytics across the bot', One row per OpenAI API call. Powers cost + latency     analytics across the bot', latency_percentiles(), Repo helpers for the ``llm_call_logs`` table.  The table is append-only — every, Compute p50 + p95 + p99 latency over a window. Postgres'     ``percentile_cont``, Top-N patients by total LLM cost in the window. Identifies     expensive patient, Persist one LLM call record. Caller is the     ``track_llm_call`` context manage (+4 more)
 
 ### Community 121 - "Community 121"
-Cohesion: 0.14
-Nodes (14): create(), deactivate(), find_by_cohort_test(), get(), list_all(), Partial update. ``cohort_attr`` and ``test_name`` are NOT mutable     here — tho, Partial update. ``cohort_attr`` and ``test_name`` are NOT mutable     here — tho, Active + inactive — used by the ops console editor so deactivated     plans are (+6 more)
+Cohesion: 0.12
+Nodes (17): CarePlan, One standing-order care rule — "patients in cohort X get     test_name Y every c, One standing-order care rule — "patients in cohort X get     test_name Y every c, create(), deactivate(), find_by_cohort_test(), get(), list_all() (+9 more)
 
 ### Community 122 - "Community 122"
 Cohesion: 0.16
@@ -879,12 +864,12 @@ Cohesion: 0.14
 Nodes (20): BroadcastCampaign, Cohort-targeted bulk template send. Materialises into N     ``scheduled_events``, Cohort-targeted bulk template send. Materialises into N     ``scheduled_events``, _campaign_to_dto(), _count_sends_by_skip_reason(), get_broadcast_campaign(), list_broadcast_campaigns(), Newest-first list of campaigns with their     materialisation counts. Powers the (+12 more)
 
 ### Community 126 - "Community 126"
-Cohesion: 0.23
-Nodes (11): _BriefBody, _compute_key_metrics(), generate_brief(), LLM-powered pre-visit brief generation.  When a doctor opens a patient (or 2 hou, Compact representation of timeline events for the LLM     prompt. We don't dump, Pre-compute the at-a-glance numbers from the timeline     events. Centralising t, Build a brief from the patient's last ``window_days`` of     activity, persist i, Structured LLM output. The OpenAI parsed completion     materialises this direct (+3 more)
+Cohesion: 0.10
+Nodes (24): get_llm(), Module-level lazy singleton so tests can monkeypatch one instance., Module-level lazy singleton so tests can monkeypatch one instance., _persist_clinical_alert_if_urgent(), Run the triage classifier and persist a ``clinical_alerts``     row when severit, Run the triage classifier and persist a ``clinical_alerts``     row when severit, classify_clinical_urgency(), Clinical urgency triage on inbound messages.  Layered ON TOP of the existing inb (+16 more)
 
 ### Community 127 - "Community 127"
-Cohesion: 0.12
-Nodes (19): gateway_auth_headers(), Shared-secret auth for the internal WhatsApp gateway.  The gateway's ``/send`` (, The ``x-api-key`` header for a server-to-server gateway call, or an     empty di, _format_page_body(), page_alert(), pick_doctor_for_alert(), _pick_recent_appointment_doctor(), _post_to_gateway() (+11 more)
+Cohesion: 0.15
+Nodes (16): _format_page_body(), page_alert(), pick_doctor_for_alert(), _pick_recent_appointment_doctor(), _post_to_gateway(), Doctor paging for critical clinical alerts.  When the triage classifier raises a, Plain-text WhatsApp body for the doctor page. Hard-cap     each section so the m, Plain-text WhatsApp body for the doctor page. Hard-cap     each section so the m (+8 more)
 
 ### Community 128 - "Community 128"
 Cohesion: 0.20
@@ -911,8 +896,8 @@ Cohesion: 0.32
 Nodes (8): RISK_BADGE, RouteResultCard(), RouteTesterForm(), RUNNER_BADGE, SAMPLES, RouteResponse, routeAction(), RouteActionState
 
 ### Community 134 - "Community 134"
-Cohesion: 0.17
-Nodes (4): End-to-end persistence integration tests.  Skipped automatically when DATABASE_U, Helper: the most recent ticket id for a patient (None if absent)., test_route_persists_inbound_state_and_audit(), _ticket_id_for()
+Cohesion: 0.14
+Nodes (6): End-to-end persistence integration tests.  Skipped automatically when DATABASE_U, Helper: the most recent ticket id for a patient (None if absent)., test_route_persists_inbound_state_and_audit(), _ticket_id_for(), next, test_milestone_dates_sorted_and_anchored()
 
 ### Community 135 - "Community 135"
 Cohesion: 0.07
@@ -927,12 +912,12 @@ Cohesion: 0.21
 Nodes (11): _caregiver_handler_node(), Caregiver consent reply (YES / NO / marker tap). Resolves the     pending caregi, Caregiver consent reply (YES / NO / marker tap). Resolves the     pending caregi, _find_pending_caregiver(), handle_caregiver_action(), looks_like_caregiver_action(), _parse_action(), Deterministic handler for caregiver consent replies.  A caregiver was added to a (+3 more)
 
 ### Community 138 - "Community 138"
-Cohesion: 0.21
-Nodes (10): _build_engine(), get_engine(), text, ``AsyncPostgresSaver.setup()`` must have created the checkpoint_* tables on, test_checkpoint_tables_exist(), DB connectivity smoke test — skipped when DATABASE_URL is unset., test_engine_connects_and_runs_select_one(), test_session_yields_and_commits() (+2 more)
+Cohesion: 0.25
+Nodes (8): _build_engine(), get_engine(), text, DB connectivity smoke test — skipped when DATABASE_URL is unset., test_engine_connects_and_runs_select_one(), test_session_yields_and_commits(), downgrade(), upgrade()
 
 ### Community 139 - "Community 139"
-Cohesion: 0.12
-Nodes (21): Integration tests for the patient right-of-erasure flow.  End-to-end against rea, The patient row's PII fields must be overwritten in     place. Reading back via, Defense-in-depth: missing or false ``confirm`` must 400.     A misclick on the U, The pydantic model requires non-empty actor + reason. The     audit trail is the, Caregiver rows linked to the erased patient must have     their full_name + phon, Inbound + outbound message_log rows for the patient must     have their JSON con, The audit log MUST persist past erasure — it's the     regulator-trace evidence, A second erase call on an already-erased patient must     NOT overwrite the orig (+13 more)
+Cohesion: 0.20
+Nodes (4): COMPONENT_LABEL, TONE_BADGE, TONE_LABEL, HealthSummary
 
 ### Community 140 - "Community 140"
 Cohesion: 0.19
@@ -1019,16 +1004,16 @@ Cohesion: 0.21
 Nodes (11): _ensure_utc(), _open_ticket_for_regimen(), Missed-dose sweep + escalation.  Runs periodically to:   1. Mark every ``Adheren, True iff the most recent ``threshold`` PAST adherence events for this     regime, Create an ops_ticket for the patient who owns this regimen, unless     one is al, True iff the most recent ``threshold`` PAST adherence events for this     regime, Create an ops_ticket for the patient who owns this regimen, unless     one is al, One full pass: mark past-due as missed + escalate over-threshold     regimens. I (+3 more)
 
 ### Community 161 - "Community 161"
-Cohesion: 0.10
-Nodes (13): The policy node uses DbAuditTrail; that should produce a     record_type='policy, test_policy_gate_writes_policy_decision_audit_row(), next, Smoke checks that the WhatsApp gateway module imports cleanly.  The previous in-, The outside-CSW reminder path ships a template send with per-call     quick_repl, Sanity check the JSON shape we send to Meta for interactive buttons., With GATEWAY_API_KEY set, every non-/health request needs the key. The     middl, Sanity check the JSON shape we send to Meta for interactive buttons. (+5 more)
+Cohesion: 0.12
+Nodes (10): Smoke checks that the WhatsApp gateway module imports cleanly.  The previous in-, The outside-CSW reminder path ships a template send with per-call     quick_repl, Sanity check the JSON shape we send to Meta for interactive buttons., With GATEWAY_API_KEY set, every non-/health request needs the key. The     middl, Sanity check the JSON shape we send to Meta for interactive buttons., The outside-CSW reminder path ships a template send with per-call     quick_repl, test_interactive_buttons_body_shape_matches_meta_spec(), test_interactive_list_body_shape_matches_meta_spec() (+2 more)
 
 ### Community 162 - "Community 162"
 Cohesion: 0.22
 Nodes (5): Unit tests for the language allowlist + helpers., Unknown codes display uppercased so a misconfigured patient     surfaces visibly, The LLM prompt embeds the hint verbatim — having the script     name in there pu, test_language_label_falls_back_for_unknown(), test_llm_hint_includes_script_for_indian_languages()
 
 ### Community 163 - "Community 163"
-Cohesion: 0.07
-Nodes (40): OrderStatus, Same shape as _dose_handler_node but for refill button taps —     Refilled / Sno, Same shape as _dose_handler_node but for refill button taps —     Refilled / Sno, _refill_handler_node(), DeepLinkPharmacyAdapter, get_pharmacy_adapter(), OrderRequest, PharmacyAdapter (+32 more)
+Cohesion: 0.06
+Nodes (50): OrderStatus, Same shape as _dose_handler_node but for refill button taps —     Refilled / Sno, Same shape as _dose_handler_node but for refill button taps —     Refilled / Sno, _refill_handler_node(), DeepLinkPharmacyAdapter, get_pharmacy_adapter(), OrderRequest, PharmacyAdapter (+42 more)
 
 ### Community 164 - "Community 164"
 Cohesion: 0.25
@@ -1043,12 +1028,12 @@ Cohesion: 0.09
 Nodes (23): code:bash (mkdir -p graphify-out), code:bash ($(cat graphify-out/.graphify_python) -c "), code:bash (graphify export obsidian), code:bash (graphify export html  # auto-aggregates to community view if), code:bash (graphify export wiki), code:bash (graphify export svg), code:bash (graphify export graphml), code:bash (python3 -m graphify.serve graphify-out/graph.json) (+15 more)
 
 ### Community 167 - "Community 167"
-Cohesion: 0.24
-Nodes (12): _open_control_tickets(), Integration tests for the asthma cohort pack (DB-backed).  Covers rescue-inhaler, A rescue report bundled with an adverse-event signal must route to     clinical, _rescue_observations(), _seed_patient(), test_asthma_cohort_broadcast_targeting(), test_handle_rescue_log_persists_observation(), test_handle_trigger_log_persists() (+4 more)
+Cohesion: 0.12
+Nodes (23): _open_control_tickets(), Integration tests for the asthma cohort pack (DB-backed).  Covers rescue-inhaler, A rescue report bundled with an adverse-event signal must route to     clinical, _rescue_observations(), _seed_patient(), test_asthma_cohort_broadcast_targeting(), test_handle_rescue_log_persists_observation(), test_handle_trigger_log_persists() (+15 more)
 
 ### Community 168 - "Community 168"
-Cohesion: 0.25
-Nodes (8): Resolve the operator-actor identity for a privileged endpoint.      Returns ``(a, resolve_actor(), export_patient_data(), Clear the ops-initiated bot pause. Outbound resumes on the     next dispatcher t, Clear the ops-initiated bot pause. Outbound resumes on the     next dispatcher t, DSAR right-of-access endpoint. Returns a single JSON document     containing the, DSAR right-of-access endpoint. Returns a single JSON document     containing the, unpause_bot_endpoint()
+Cohesion: 0.11
+Nodes (21): erase_patient_endpoint(), export_patient_data(), get_patient_detail(), get_patient_timeline(), list_patients(), list_supported_languages(), pause_bot_endpoint(), Patient list / detail / timeline + language, pause, erasure & export.  Extracted (+13 more)
 
 ### Community 169 - "Community 169"
 Cohesion: 0.28
@@ -1083,8 +1068,8 @@ Cohesion: 0.33
 Nodes (3): DoctorDigestPage(), formatDate(), PRIORITY_BADGE
 
 ### Community 177 - "Community 177"
-Cohesion: 0.22
-Nodes (10): get_session(), FastAPI dependency. Yields an AsyncSession; commits on exit, rolls back on error, FastAPI dependency. Yields an AsyncSession; commits on exit, rolls back on error, DoctorReplyRequest, DoctorReplyResponse, Doctor-authored outbound reply endpoint (clinician → patient).  Extracted from m, POST a freeform doctor-authored reply to the WhatsApp gateway.     Returns wamid, Doctor / clinician-authored freeform reply to a patient. The     bot's auto-hand (+2 more)
+Cohesion: 0.13
+Nodes (18): get_session(), FastAPI dependency. Yields an AsyncSession; commits on exit, rolls back on error, FastAPI dependency. Yields an AsyncSession; commits on exit, rolls back on error, audit_search(), AuditRecordDTO, AuditSearchResponseDTO, _parse_search_dt(), Audit-log search endpoint. Extracted from main.py. (+10 more)
 
 ### Community 178 - "Community 178"
 Cohesion: 0.33
@@ -1195,16 +1180,16 @@ Cohesion: 0.50
 Nodes (4): Legacy rows pre-migration have NULL ``onboarding_step_at`` —     we must NOT tre, Legacy rows pre-migration have NULL ``onboarding_step_at`` —     the handler mus, test_is_stale_null_step_at_returns_false(), test_legacy_null_step_at_does_not_reset()
 
 ### Community 253 - "Community 253"
-Cohesion: 0.11
-Nodes (22): Pregnancy, PregnancyStatus, Lifecycle of a pregnancy episode. Stored as a plain String on the     row (see :, A single pregnancy episode for a patient, anchored on the LMP.      The pregnanc, create(), end_postpartum(), end_pregnancy(), get() (+14 more)
+Cohesion: 0.15
+Nodes (16): PregnancyStatus, Lifecycle of a pregnancy episode. Stored as a plain String on the     row (see :, end_postpartum(), end_pregnancy(), get(), get_postpartum_active_for_patient(), list_active(), list_postpartum_active() (+8 more)
 
 ### Community 266 - "Community 266"
 Cohesion: 0.26
 Nodes (15): _make_order(), Integration tests for the partner / refill execute layer (DB-backed).  Covers th, _seed_patient_regimen(), test_create_order_endpoint_and_dedupe(), test_create_order_requires_med_or_regimen(), test_dispatcher_builds_order_receipt_template(), test_dispatcher_builds_substitution_request_template(), test_dispatcher_substitution_freeform_in_csw() (+7 more)
 
 ### Community 267 - "Community 267"
-Cohesion: 0.12
-Nodes (18): Empty name must 422 — the audit trail (name + created_by     + reason) is the re, test_create_endpoint_validates_required_fields(), _create_patient(), Integration tests for the patient bot-pause endpoint and the dispatcher's pause, ``unpause_bot`` must clear ALL three columns. Stale     ``bot_paused_reason`` af, End-to-end POST /pause-bot → patient detail surfaces the     pause. POST /unpaus, The pydantic model requires ``actor`` and ``reason`` (both     min_length=1) — m, Pause columns must surface on the existing detail endpoint     so the ops consol (+10 more)
+Cohesion: 0.15
+Nodes (14): _create_patient(), Integration tests for the patient bot-pause endpoint and the dispatcher's pause, ``unpause_bot`` must clear ALL three columns. Stale     ``bot_paused_reason`` af, End-to-end POST /pause-bot → patient detail surfaces the     pause. POST /unpaus, Pause columns must surface on the existing detail endpoint     so the ops consol, Create a unique patient and return its id., ``pause_bot(actor, reason)`` writes all three audit columns     on a fresh patie, A second pause on an already-paused patient must NOT     overwrite the original (+6 more)
 
 ### Community 268 - "Community 268"
 Cohesion: 0.15
@@ -1215,12 +1200,12 @@ Cohesion: 0.29
 Nodes (14): _lmp_10w_ago(), _pending_pregnancy_events(), Integration tests for the pregnancy timeline engine (DB-backed).  Covers the int, _seed_patient(), test_build_milestone_reminder_skips_ended_pregnancy(), test_build_weekly_reminder_freeform_in_csw(), test_build_weekly_reminder_uses_template_out_of_csw(), test_create_duplicate_active_returns_409() (+6 more)
 
 ### Community 270 - "Community 270"
-Cohesion: 0.15
-Nodes (16): _days_of_supply_remaining(), Shared DTOs used across multiple orchestrator routers.  ``LabFollowupDTO`` / ``R, _regimen_to_dto(), create_regimen(), deactivate_regimen(), fire_test_dose(), fire_test_refill(), list_patient_regimens() (+8 more)
+Cohesion: 0.17
+Nodes (15): _days_of_supply_remaining(), _regimen_to_dto(), create_regimen(), deactivate_regimen(), fire_test_dose(), fire_test_refill(), list_patient_regimens(), Regimen + dose/refill test-trigger endpoints.  Extracted from main.py. Regimen C (+7 more)
 
 ### Community 271 - "Community 271"
-Cohesion: 0.13
-Nodes (22): _assert_postpartum_active(), _assert_pregnancy_active(), _build_appointment_reminder(), _build_postpartum_milestone_reminder(), _build_postpartum_weekly_reminder(), _build_pregnancy_milestone_reminder(), _build_pregnancy_weekly_reminder(), _dose_caregiver_fanout_messages() (+14 more)
+Cohesion: 0.14
+Nodes (16): _assert_postpartum_active(), _assert_pregnancy_active(), _build_postpartum_milestone_reminder(), _build_postpartum_weekly_reminder(), _build_pregnancy_milestone_reminder(), _build_pregnancy_weekly_reminder(), _dose_caregiver_fanout_messages(), _patient_first_name() (+8 more)
 
 ### Community 272 - "Community 272"
 Cohesion: 0.17
@@ -1236,7 +1221,7 @@ Nodes (14): Already shipped (context), Deferred (correctly out of scope — SoT 
 
 ### Community 275 - "Community 275"
 Cohesion: 0.21
-Nodes (14): BroadcastCampaignDetailDTO, BroadcastCampaignDTO, _campaign_to_dto(), _count_sends_by_skip_reason(), create_broadcast_campaign(), get_broadcast_campaign(), list_broadcast_campaigns(), list_broadcast_recipients() (+6 more)
+Nodes (14): BroadcastCampaignDetailDTO, BroadcastSendDTO, _campaign_to_dto(), _count_sends_by_skip_reason(), create_broadcast_campaign(), get_broadcast_campaign(), list_broadcast_campaigns(), list_broadcast_recipients() (+6 more)
 
 ### Community 276 - "Community 276"
 Cohesion: 0.20
@@ -1267,8 +1252,8 @@ Cohesion: 0.15
 Nodes (13): code:bash ($(cat graphify-out/.graphify_python) -c "), code:block11 ([Agent tool call 1: files 1-15, subagent_type="general-purpo), code:bash (PROJECT_ROOT=$(cat graphify-out/.graphify_root)), code:block13 (You are a graphify extraction subagent. Read the files liste), code:bash ($(cat graphify-out/.graphify_python) -c "), code:bash ($(cat graphify-out/.graphify_python) -c "), code:bash ($(cat graphify-out/.graphify_python) -c "), code:bash ($(cat graphify-out/.graphify_python) -c ") (+5 more)
 
 ### Community 283 - "Community 283"
-Cohesion: 0.33
-Nodes (6): The dispatcher's _build_message_out must read template     name + params from a, A malformed broadcast_send (missing template_name in     payload) must raise — t, test_dispatcher_branch_handles_broadcast_send_payload(), test_dispatcher_broadcast_payload_missing_template_raises(), _build_message_out(), _stringify_params()
+Cohesion: 0.19
+Nodes (12): The dispatcher's _build_message_out must read template     name + params from a, A malformed broadcast_send (missing template_name in     payload) must raise — t, test_dispatcher_branch_handles_broadcast_send_payload(), test_dispatcher_broadcast_payload_missing_template_raises(), _build_appointment_reminder(), _build_message_out(), _ensure_utc(), _is_stale() (+4 more)
 
 ### Community 284 - "Community 284"
 Cohesion: 0.29
@@ -1295,16 +1280,16 @@ Cohesion: 0.20
 Nodes (12): Exception, dispatch(), _handle_clinical_alert_page(), _handle_visit_brief_generate(), _is_permanent_http_status(), Internal-only event handler — invokes the LLM brief     generator instead of the, Critical-alert paging handler. Calls the pager service     which resolves a doct, Whether a gateway/Meta HTTP status is a PERMANENT send failure.      A 4xx means (+4 more)
 
 ### Community 290 - "Community 290"
-Cohesion: 0.21
-Nodes (12): _get_model(), looks_like_voice_note(), maybe_transcribe(), parse_voice_marker(), Voice-note transcription adapter.  WhatsApp voice notes are a first-class input, Lazy-load the faster-whisper model. Returns ``None`` when the     optional depen, Transcribe an audio file to text. Returns ``None`` on any failure     (missing d, If ``text`` is a voice-note marker, resolve + transcribe the audio     and retur (+4 more)
+Cohesion: 0.23
+Nodes (11): _get_model(), maybe_transcribe(), parse_voice_marker(), Voice-note transcription adapter.  WhatsApp voice notes are a first-class input, Lazy-load the faster-whisper model. Returns ``None`` when the     optional depen, Transcribe an audio file to text. Returns ``None`` on any failure     (missing d, If ``text`` is a voice-note marker, resolve + transcribe the audio     and retur, Return ``(public_path, mime)`` from a voice marker, or ``None``. (+3 more)
 
 ### Community 291 - "Community 291"
 Cohesion: 0.26
 Nodes (11): add_household_member(), create_household(), get_household(), get_patient_household(), _household_to_dto(), HouseholdCreateRequest, HouseholdDTO, HouseholdMemberAddRequest (+3 more)
 
 ### Community 292 - "Community 292"
-Cohesion: 0.23
-Nodes (12): _failed_scheduled_events_24h(), fire_test_reminder(), get_ops_health(), HealthSummaryDTO, _heartbeat_to_dto(), HeartbeatDTO, _pending_overdue_count(), Ops health/observability + appointment demo-trigger endpoints.  Extracted from m (+4 more)
+Cohesion: 0.24
+Nodes (11): _failed_scheduled_events_24h(), fire_test_reminder(), get_ops_health(), HealthSummaryDTO, _heartbeat_to_dto(), HeartbeatDTO, _pending_overdue_count(), Ops health/observability + appointment demo-trigger endpoints.  Extracted from m (+3 more)
 
 ### Community 293 - "Community 293"
 Cohesion: 0.18
@@ -1327,8 +1312,8 @@ Cohesion: 0.35
 Nodes (10): capture_enqueue(), _milestone_keys(), _patch_pending(), Unit tests for the pregnancy milestone materializer's scheduling logic.  The DB, Patch the idempotent enqueue to record calls + return a lightweight row., test_materialize_derives_lmp_from_edd(), test_materialize_enqueues_future_only(), test_materialize_is_idempotent() (+2 more)
 
 ### Community 298 - "Community 298"
-Cohesion: 0.13
-Nodes (9): Confirmed but notify_on_recap=False → not a recipient., _seed_patient(), test_create_then_confirm_then_revoke_lifecycle(), test_inactive_caregivers_excluded_from_recipients(), test_recap_recipients_respect_notify_flag(), Unit tests for the pregnancy timeline math + milestone schedule (no DB).  These, test_milestone_dates_sorted_and_anchored(), test_next_weekly_checkins() (+1 more)
+Cohesion: 0.18
+Nodes (3): Unit tests for the pregnancy timeline math + milestone schedule (no DB).  These, test_next_weekly_checkins(), test_upcoming_and_next_milestone_filtering()
 
 ### Community 299 - "Community 299"
 Cohesion: 0.27
@@ -1355,16 +1340,16 @@ Cohesion: 0.29
 Nodes (9): Unit tests for the caregiver dose-reminder fan-out builder.  Verifies the global, Even with caregivers + adherence + a patient present, the flag is the     kill s, Flag on, but list_active_dose_recipients returns []., A stale dose event for a deleted adherence row should produce no     fanouts (th, _stub_event(), test_fanout_builds_template_messages_per_caregiver(), test_fanout_returns_empty_when_adherence_missing(), test_fanout_returns_empty_when_global_flag_off() (+1 more)
 
 ### Community 305 - "Community 305"
-Cohesion: 0.25
-Nodes (18): AdherenceEvent, create_scheduled(), _ensure_utc(), get(), get_by_regimen_at(), list_for_patient(), list_pending_past(), list_recent_for_regimen() (+10 more)
+Cohesion: 0.42
+Nodes (8): DeliverySummary, _bucket_expr(), _default_since(), delivery_summary(), delivery_summary_by_template(), Delivery-rate roll-up queries.  Joins ``message_log`` (outbound rows) to ``whats, Per-template delivery rollup.      The aggregate ``delivery_summary`` blends eve, Single-pass rollup of outbound delivery state since ``since``.      Returns:
 
 ### Community 306 - "Community 306"
 Cohesion: 0.31
 Nodes (7): PostOpEpisode, A post-surgical recovery episode, anchored on the surgery date.      Drives day-, create(), end_episode(), get(), get_active_for_patient(), Post-op recovery episode persistence (mirrors pregnancies repo).
 
 ### Community 307 - "Community 307"
-Cohesion: 0.12
-Nodes (17): Integration tests for clinician-authored doctor replies.  Covers: - 404 when pat, Edge case: a Patient row with empty phone (shouldn't happen via     onboarding b, Edge case: a Patient row with empty phone (shouldn't happen via     onboarding b, Gateway returns no wamid → endpoint must surface a 502 so the     UI can show a, Gateway returns no wamid → endpoint must surface a 502 so the     UI can show a, Create a patient. If ``in_csw=True``, also seed an inbound-state     row dated n, Create a patient. If ``in_csw=True``, also seed an inbound-state     row dated n, Without a recent inbound, the CSW gate must reject the send so     the doctor se (+9 more)
+Cohesion: 0.33
+Nodes (5): createBroadcastCampaignAction(), str(), COHORTS, create_broadcast_campaign(), Create a broadcast campaign. With ``materialise_immediately``     (default True)
 
 ### Community 308 - "Community 308"
 Cohesion: 0.22
@@ -1411,8 +1396,8 @@ Cohesion: 0.39
 Nodes (6): _observations(), Integration tests for the /route voice-note path (DB-backed).  Proves a spoken m, When whisper is unavailable, ``maybe_transcribe`` yields the typed-     fallback, _seed_patient(), test_voice_note_fallback_when_transcription_unavailable(), test_voice_note_transcribes_to_vitals_and_badges_voice()
 
 ### Community 320 - "Community 320"
-Cohesion: 0.19
-Nodes (18): _make_goal(), _make_obs(), Integration tests for the goal drift sweep (slice 17).  The drift evaluator is p, Even if older values were off-target, the most recent     on-target observation, The doctor's most concerning case: patient WAS on     target, but the latest rea, All recent observations off-target. Different from     slipping — patient never, Off-target observations from > 14 days ago classify as     ``stale``, not ``pers, Goals like 'exercise > 150 min/week' compare in the     opposite direction. Make (+10 more)
+Cohesion: 0.32
+Nodes (7): _prescription_handler_node(), Inbound prescription image: short-circuit, create the row, run the     vision LL, Inbound prescription image: short-circuit, create the row, run the     vision LL, handle_prescription_upload(), _public_base_url(), Deterministic handler for inbound prescription photos.  The Next.js webhook down, _reply()
 
 ### Community 321 - "Community 321"
 Cohesion: 0.39
@@ -1439,16 +1424,16 @@ Cohesion: 0.29
 Nodes (7): _polling_loop(), Force one immediate poll cycle. Returns counts., Force one immediate poll cycle. Returns counts., One async poll cycle: claim due events, dispatch, mark each., One async poll cycle: claim due events, dispatch, mark each.      Commits PER EV, _run_tick_once(), scheduler_tick()
 
 ### Community 328 - "Community 328"
-Cohesion: 0.14
-Nodes (18): _open_service_health_tickets_for(), Integration tests for the service-health reconciler — observability auto-ticketi, Running the reconciler twice while a ticket is still open     must not open a se, 3 consecutive errors → ticket opens. Component is still fresh     (last_run_at =, 3 consecutive errors → ticket opens. Component is still fresh     (last_run_at =, A single error (consecutive_errors=1) is below the threshold of     3 — no ticke, A single error (consecutive_errors=1) is below the threshold of     3 — no ticke, Insert ≥5 failed scheduled_events in the last 30 min → ticket     opens keyed on (+10 more)
+Cohesion: 0.53
+Nodes (5): ExportPatientButton(), Props, safeFilenamePart(), todayIso(), exportPatientAction()
 
 ### Community 329 - "Community 329"
-Cohesion: 0.16
-Nodes (18): _appointments_today_section(), build_digest(), _open_tickets_section(), _panel_patient_ids(), _patient_name_lookup(), Doctor daily digest — morning panel-management view.  A doctor logging in for th, Return [start, end] for the UTC day containing ``when``.     Used by the appoint, Distinct patient_ids the doctor has had any appointment with     since ``since`` (+10 more)
+Cohesion: 0.60
+Nodes (5): adherenceTone(), formatDateTime(), formatPercent(), VisitBriefSection(), VisitBrief
 
 ### Community 330 - "Community 330"
-Cohesion: 0.16
-Nodes (14): Integration tests for care_plans CRUD + endpoints + cohort allowlist., Phase 3b changed the response shape from a flat list[str] of     cohort_attrs to, The first create succeeds; the second with the same (cohort, test)     must 409, A new active plan added via the API should be picked up by the     sweep — that', Migration 0014 seeds the 3 hard-coded V1 rules. Verify they exist     so a fresh, test_create_and_deactivate_plan(), test_endpoint_cohorts_returns_allowlist(), test_endpoint_create_rejects_duplicate() (+6 more)
+Cohesion: 0.33
+Nodes (6): Pregnancy, A single pregnancy episode for a patient, anchored on the LMP.      The pregnanc, create(), get_active_for_patient(), The patient's current active pregnancy, or ``None``., Open a new active pregnancy. Requires at least one of ``lmp_date`` /     ``edd``
 
 ### Community 331 - "Community 331"
 Cohesion: 0.33
@@ -1475,8 +1460,8 @@ Cohesion: 0.40
 Nodes (4): category, components, language, name
 
 ### Community 338 - "Community 338"
-Cohesion: 0.33
-Nodes (5): ProcessedInboundMessage, Inbound-message dedupe ledger.      The orchestrator's ``/route`` endpoint claim, claim(), Inbound-message dedupe ledger repo.  Backs the orchestrator ``/route`` replay gu, Atomically claim an inbound message id for processing.      Returns ``True`` whe
+Cohesion: 0.50
+Nodes (3): claim(), Inbound-message dedupe ledger repo.  Backs the orchestrator ``/route`` replay gu, Atomically claim an inbound message id for processing.      Returns ``True`` whe
 
 ### Community 339 - "Community 339"
 Cohesion: 0.50
@@ -1491,8 +1476,8 @@ Cohesion: 0.50
 Nodes (4): 6) Buildable Architecture (Python + LangGraph), Components, Inbound Conversation Graph Nodes, Scheduler Graph Nodes
 
 ### Community 342 - "Community 342"
-Cohesion: 0.17
-Nodes (7): _FakeAsyncCompletions, _FakeChat, _FakeChoice, _FakeClient, _FakeCompletion, _FakeMessage, _FakeUsage
+Cohesion: 0.50
+Nodes (4): Empty name must 422 — the audit trail (name + created_by     + reason) is the re, test_create_endpoint_validates_required_fields(), The pydantic model requires ``actor`` and ``reason`` (both     min_length=1) — m, test_pause_endpoint_validates_required_fields()
 
 ### Community 355 - "Community 355"
 Cohesion: 0.67
@@ -1530,77 +1515,25 @@ Nodes (3): _isolate_scheduled_events(), Drop stale pending events before each sc
 Cohesion: 0.67
 Nodes (3): Force one dose-materialize pass for every active regimen. Useful     after creat, Force one dose-materialize pass for every active regimen. Useful     after creat, scheduler_materialize_doses()
 
-### Community 368 - "Community 368"
-Cohesion: 0.20
-Nodes (13): Integration tests for the adherence-drop sweep.  End-to-end against real Postgre, Even with 100% missed (worst possible rate), a 3-event     window is below the d, Two consecutive sweeps over the same dropping patient must     produce ONE ticke, Patient drops → ticket opens. Then their adherence     recovers (80%), next swee, Events older than the rolling window must NOT count     toward the rate. Otherwi, Create a patient + regimen + ``taken+missed+skipped``     adherence rows with th, Tighten min volume + threshold via env so a fresh patient     with a clear drop, _seed_patient_with_adherence() (+5 more)
-
-### Community 373 - "Community 373"
-Cohesion: 0.17
-Nodes (12): Generator for after-visit patient recap WhatsApp messages.  The doctor authors s, Compact JSON-ish payload for the LLM to expand into the recap., Template-based renderer used as the LLM fallback. Kept simple and     structural, _RecapBody, render_deterministic(), _render_med_line(), _render_user_payload(), 1 day → tomorrow; <14 days → in N days; <60 → weeks; else months. (+4 more)
-
-### Community 374 - "Community 374"
-Cohesion: 0.17
-Nodes (11): _FakeLLM, Stub the LLM to return critical — the classifier     forwards severity + red_fla, ``TRIAGE_ENABLED=0`` must short-circuit the classifier     BEFORE the LLM is cal, Absent env var → triage runs (default ON). Belt-and-     suspenders: confirm the, Full /route → triage → alert flow. Stub the LLM to     return critical severity;, Routine messages must NOT generate alert rows even     when the classifier sees, test_classifier_creates_alert_via_route_endpoint(), test_classifier_does_not_create_alert_for_low_severity() (+3 more)
-
-### Community 375 - "Community 375"
-Cohesion: 0.21
-Nodes (11): _classify_send(), _cohort_column(), materialise_campaign(), Cohort-broadcast orchestration.  Materialises a campaign into per-recipient sche, Resolve recipients + create per-recipient broadcast_sends     rows + enqueue sch, Decide whether a recipient is eligible to receive the     broadcast. Returns ``(, Resolve recipients + create per-recipient broadcast_sends     rows + enqueue sch, Resolve a cohort filter to the matching patient rows.      For v1 we support the (+3 more)
-
-### Community 376 - "Community 376"
-Cohesion: 0.53
-Nodes (9): _cleanup(), _make_appointment(), _make_doctor_and_patient(), Integration tests for appointment reminder materialize / cancel.  Hits the real, test_cancel_marks_pending_reminders_skipped(), test_cancel_only_touches_matching_appointment(), test_materialize_creates_two_pending_reminders(), test_materialize_keeps_only_one_h_when_close_to_appointment() (+1 more)
-
-### Community 377 - "Community 377"
-Cohesion: 0.25
-Nodes (6): metadata, is_retry, priority, tenant_id, OpsPrioritizer, TriageSignal
-
-### Community 378 - "Community 378"
-Cohesion: 0.31
-Nodes (8): audit_search(), AuditRecordDTO, AuditSearchResponseDTO, _parse_search_dt(), Audit-log search endpoint. Extracted from main.py., Trimmed AuditRecord shape for the search UI. ``details`` is     a free-form dict, Parse a search-filter ISO datetime. Returns None for blank,     raises HTTPExcep, Filtered + paginated audit-records search. Powers the     ops-console /audit-sea
-
-### Community 379 - "Community 379"
-Cohesion: 0.32
-Nodes (7): classify_clinical_urgency(), Clinical urgency triage on inbound messages.  Layered ON TOP of the existing inb, Classify ``text`` for clinical urgency. Best-effort:     on any LLM failure (dis, Kill switch for the triage classifier.      Read at every call (NOT cached at mo, Structured triage output. ``red_flags`` lists the     specific triggers the mode, _triage_enabled(), TriageDecision
-
-### Community 380 - "Community 380"
-Cohesion: 0.47
-Nodes (4): create_confirmed(), get(), mark_cancelled(), reschedule()
-
-### Community 381 - "Community 381"
-Cohesion: 0.50
-Nodes (3): formatDate(), PRESET_DAYS, SideEffectAnalyticsPage()
-
-### Community 384 - "Community 384"
-Cohesion: 0.67
-Nodes (3): A goal with no observations + recently created should     be classified ``no_dat, A goal with no observations + recently created should     be classified ``no_dat, test_sweep_does_not_alert_no_data_freshly_created_goal()
-
-### Community 385 - "Community 385"
-Cohesion: 0.67
-Nodes (3): Bring up the scheduler with the polling loop OFF so /scheduler/tick is the     o, Bring up the scheduler with the polling loop OFF so /scheduler/tick is the     o, scheduler_client()
-
-### Community 386 - "Community 386"
-Cohesion: 0.67
-Nodes (3): erase_patient_endpoint(), Right-of-erasure endpoint. Anonymizes the patient row +     all PII-bearing rela, Right-of-erasure endpoint. Anonymizes the patient row +     all PII-bearing rela
-
 ## Knowledge Gaps
-- **420 isolated node(s):** `LanguageOption`, `AlertSeverity`, `AlertLifecycle`, `TemplateCategory`, `TriageSeverity` (+415 more)
+- **416 isolated node(s):** `LanguageOption`, `AlertSeverity`, `AlertLifecycle`, `TemplateCategory`, `TriageSeverity` (+411 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **30 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **28 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `get_sessionmaker()` connect `Community 11` to `Community 3`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 13`, `Community 14`, `Community 15`, `Community 16`, `Community 18`, `Community 21`, `Community 24`, `Community 26`, `Community 27`, `Community 29`, `Community 31`, `Community 33`, `Community 34`, `Community 37`, `Community 41`, `Community 47`, `Community 50`, `Community 51`, `Community 52`, `Community 55`, `Community 56`, `Community 59`, `Community 62`, `Community 68`, `Community 69`, `Community 73`, `Community 75`, `Community 84`, `Community 88`, `Community 90`, `Community 93`, `Community 94`, `Community 96`, `Community 98`, `Community 99`, `Community 103`, `Community 106`, `Community 108`, `Community 114`, `Community 115`, `Community 116`, `Community 118`, `Community 119`, `Community 134`, `Community 137`, `Community 138`, `Community 139`, `Community 143`, `Community 149`, `Community 150`, `Community 161`, `Community 163`, `Community 167`, `Community 170`, `Community 173`, `Community 177`, `Community 181`, `Community 188`, `Community 195`, `Community 197`, `Community 266`, `Community 267`, `Community 269`, `Community 279`, `Community 284`, `Community 294`, `Community 298`, `Community 302`, `Community 307`, `Community 318`, `Community 319`, `Community 320`, `Community 327`, `Community 328`, `Community 330`, `Community 368`, `Community 374`, `Community 376`, `Community 384`?**
-  _High betweenness centrality (0.255) - this node is a cross-community bridge._
-- **Why does `get_session()` connect `Community 177` to `Community 1`, `Community 138`, `Community 11`, `Community 268`, `Community 270`, `Community 145`, `Community 275`, `Community 276`, `Community 277`, `Community 280`, `Community 281`, `Community 163`, `Community 291`, `Community 37`, `Community 292`, `Community 295`, `Community 296`, `Community 309`, `Community 310`, `Community 311`, `Community 312`, `Community 187`, `Community 65`, `Community 321`, `Community 194`, `Community 203`, `Community 204`, `Community 77`, `Community 82`, `Community 91`, `Community 378`?**
-  _High betweenness centrality (0.062) - this node is a cross-community bridge._
-- **Why does `Patient` connect `Community 14` to `Community 0`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 136`, `Community 266`, `Community 11`, `Community 267`, `Community 269`, `Community 139`, `Community 15`, `Community 16`, `Community 17`, `Community 18`, `Community 271`, `Community 21`, `Community 279`, `Community 26`, `Community 27`, `Community 284`, `Community 29`, `Community 285`, `Community 31`, `Community 286`, `Community 287`, `Community 34`, `Community 167`, `Community 298`, `Community 299`, `Community 171`, `Community 173`, `Community 302`, `Community 47`, `Community 45`, `Community 307`, `Community 55`, `Community 56`, `Community 313`, `Community 59`, `Community 61`, `Community 318`, `Community 62`, `Community 320`, `Community 319`, `Community 66`, `Community 191`, `Community 68`, `Community 73`, `Community 329`, `Community 342`, `Community 90`, `Community 93`, `Community 94`, `Community 96`, `Community 98`, `Community 105`, `Community 106`, `Community 368`, `Community 113`, `Community 118`, `Community 375`, `Community 376`, `Community 374`?**
-  _High betweenness centrality (0.057) - this node is a cross-community bridge._
-- **Are the 55 inferred relationships involving `Patient` (e.g. with `doctor_digest.py` and `_FakeMessage`) actually correct?**
-  _`Patient` has 55 INFERRED edges - model-reasoned connections that need verification._
+- **Why does `get_sessionmaker()` connect `Community 11` to `Community 3`, `Community 5`, `Community 134`, `Community 7`, `Community 8`, `Community 137`, `Community 138`, `Community 267`, `Community 266`, `Community 269`, `Community 14`, `Community 15`, `Community 16`, `Community 143`, `Community 18`, `Community 13`, `Community 21`, `Community 149`, `Community 279`, `Community 24`, `Community 150`, `Community 26`, `Community 27`, `Community 284`, `Community 29`, `Community 31`, `Community 6`, `Community 33`, `Community 34`, `Community 163`, `Community 37`, `Community 294`, `Community 167`, `Community 41`, `Community 170`, `Community 173`, `Community 302`, `Community 47`, `Community 177`, `Community 49`, `Community 50`, `Community 51`, `Community 52`, `Community 181`, `Community 55`, `Community 56`, `Community 59`, `Community 188`, `Community 318`, `Community 62`, `Community 319`, `Community 320`, `Community 195`, `Community 69`, `Community 197`, `Community 327`, `Community 73`, `Community 75`, `Community 84`, `Community 88`, `Community 90`, `Community 93`, `Community 94`, `Community 96`, `Community 98`, `Community 99`, `Community 103`, `Community 106`, `Community 108`, `Community 114`, `Community 115`, `Community 116`, `Community 118`, `Community 119`?**
+  _High betweenness centrality (0.245) - this node is a cross-community bridge._
+- **Why does `Patient` connect `Community 14` to `Community 0`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 136`, `Community 266`, `Community 11`, `Community 267`, `Community 269`, `Community 15`, `Community 16`, `Community 18`, `Community 21`, `Community 279`, `Community 26`, `Community 27`, `Community 284`, `Community 29`, `Community 30`, `Community 31`, `Community 283`, `Community 285`, `Community 34`, `Community 286`, `Community 287`, `Community 167`, `Community 299`, `Community 171`, `Community 173`, `Community 302`, `Community 47`, `Community 45`, `Community 49`, `Community 55`, `Community 56`, `Community 313`, `Community 59`, `Community 61`, `Community 318`, `Community 62`, `Community 319`, `Community 191`, `Community 66`, `Community 73`, `Community 90`, `Community 93`, `Community 94`, `Community 96`, `Community 98`, `Community 105`, `Community 106`, `Community 113`, `Community 118`?**
+  _High betweenness centrality (0.067) - this node is a cross-community bridge._
+- **Why does `get_session()` connect `Community 177` to `Community 1`, `Community 138`, `Community 11`, `Community 268`, `Community 270`, `Community 145`, `Community 275`, `Community 276`, `Community 277`, `Community 280`, `Community 281`, `Community 163`, `Community 291`, `Community 37`, `Community 292`, `Community 295`, `Community 296`, `Community 168`, `Community 309`, `Community 310`, `Community 311`, `Community 312`, `Community 187`, `Community 65`, `Community 321`, `Community 194`, `Community 203`, `Community 204`, `Community 77`, `Community 82`, `Community 91`?**
+  _High betweenness centrality (0.060) - this node is a cross-community bridge._
 - **Are the 167 inferred relationships involving `AppointmentStatus` (e.g. with `doctor_digest.py` and `_MockResponse`) actually correct?**
   _`AppointmentStatus` has 167 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 55 inferred relationships involving `Patient` (e.g. with `doctor_digest.py` and `_FakeMessage`) actually correct?**
+  _`Patient` has 55 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 136 inferred relationships involving `ScheduledEvent` (e.g. with `_StubGatewayTransport` and `_FakeMessage`) actually correct?**
   _`ScheduledEvent` has 136 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Normalize inbound patient responses to canonical adherence actions.`, `Simple cohort-aware triage classifier for safety-first routing.`, `Medagent application package.` to the rest of the system?**
-  _2133 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _2115 weakly-connected nodes found - possible documentation gaps or missing edges._

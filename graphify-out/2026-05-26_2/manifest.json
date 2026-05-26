@@ -540,9 +540,9 @@
     "semantic_hash": "952976bf433cb068d77aaa467a23997b"
   },
   "/Users/harshit/Code/Misc/Medagent/tests/integration/test_care_plan_exemptions.py": {
-    "mtime": 1779808250.528267,
-    "ast_hash": "e606f54e5afd3c6cbb2fe2f71669f096",
-    "semantic_hash": ""
+    "mtime": 1777825073.421103,
+    "ast_hash": "af9e1d754b7d694d75b2a975ca1881b3",
+    "semantic_hash": "af9e1d754b7d694d75b2a975ca1881b3"
   },
   "/Users/harshit/Code/Misc/Medagent/tests/integration/test_side_effect_history.py": {
     "mtime": 1778224787.051147,
@@ -945,9 +945,9 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/package.json": {
-    "mtime": 1779819723.6715977,
-    "ast_hash": "bc95357d0802fa034cd62087b682033f",
-    "semantic_hash": ""
+    "mtime": 1777798832.531196,
+    "ast_hash": "716761b817cc9561becc84e03677d83a",
+    "semantic_hash": "716761b817cc9561becc84e03677d83a"
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/tsconfig.json": {
     "mtime": 1777630017.0207934,
@@ -1140,9 +1140,9 @@
     "semantic_hash": "007bcf66703f4b3d36d35b1269ff2a27"
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/app/doctors/page.tsx": {
-    "mtime": 1779820015.946685,
-    "ast_hash": "5076213d61779206a440bdd661b65901",
-    "semantic_hash": ""
+    "mtime": 1778303640.2604969,
+    "ast_hash": "c5fbd60c5af1501cce1136c99a66f77f",
+    "semantic_hash": "c5fbd60c5af1501cce1136c99a66f77f"
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/app/doctors/_components/AvailabilityChecker.tsx": {
     "mtime": 1777630017.0187538,
@@ -1230,9 +1230,9 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/whatsapp-signature.test.ts": {
-    "mtime": 1779819738.9015586,
-    "ast_hash": "9e628fbb76bb7af753b3e142d072285c",
-    "semantic_hash": ""
+    "mtime": 1778237226.2817388,
+    "ast_hash": "4f7558459cbf14a1ea8252e2362bf17b",
+    "semantic_hash": "4f7558459cbf14a1ea8252e2362bf17b"
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/google-oauth.ts": {
     "mtime": 1777630017.0203815,
@@ -1245,8 +1245,8 @@
     "semantic_hash": "5f5f68b864e15c6268350db81e7d08e6"
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/backend.ts": {
-    "mtime": 1779819617.7984903,
-    "ast_hash": "0e9ad9a96d545cabf7b2aa7a2ea73003",
+    "mtime": 1779643030.148625,
+    "ast_hash": "918a3e6322bbf00ccee5a66cb16fb920",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/whatsapp-bot.ts": {
@@ -1930,8 +1930,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/care_plan_exemptions.py": {
-    "mtime": 1779808219.9178388,
-    "ast_hash": "28ddafbd23b6b05f05c1a8dbc405c145",
+    "mtime": 1779593746.482815,
+    "ast_hash": "684b593ca9cd450ae9c05365922e5b5b",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/appointment_recap.py": {
@@ -1980,8 +1980,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/patients.py": {
-    "mtime": 1779819528.7327054,
-    "ast_hash": "603974766016a0c7972c4706f02bf637",
+    "mtime": 1779806482.395179,
+    "ast_hash": "c269cd83de812dd539cb0d73de029865",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/households.py": {
@@ -2095,8 +2095,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/.github/workflows/ci.yml": {
-    "mtime": 1779819809.7437186,
-    "ast_hash": "ec55d14ba02f8c1c89b4c63e61515af6",
+    "mtime": 1779800631.8399158,
+    "ast_hash": "8bfd00e416b56ddfc2fcf1779b842777",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/README.md": {
@@ -2142,41 +2142,6 @@
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/public/uploads/prescriptions/91d325c9-e0a2-4d51-b471-3d14f3987105.jpg": {
     "mtime": 1777794831.8513217,
     "ast_hash": "cce805080b86bd3832d2470983277284",
-    "semantic_hash": ""
-  },
-  "/Users/harshit/Code/Misc/Medagent/app/operator_signature.py": {
-    "mtime": 1779808354.4464211,
-    "ast_hash": "f440f4010650179c431b56548313ea05",
-    "semantic_hash": ""
-  },
-  "/Users/harshit/Code/Misc/Medagent/tests/test_operator_signature.py": {
-    "mtime": 1779808338.4520772,
-    "ast_hash": "014c0e3e400a5b14c150bd9517813193",
-    "semantic_hash": ""
-  },
-  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_operator_signature_endpoint.py": {
-    "mtime": 1779819650.8477032,
-    "ast_hash": "dc8a001d44f2c7e766137ef8e3f44802",
-    "semantic_hash": ""
-  },
-  "/Users/harshit/Code/Misc/Medagent/apps/ops_console/vitest.config.ts": {
-    "mtime": 1779819795.784754,
-    "ast_hash": "bc572edcb20c62bd8262d17d1a196ddf",
-    "semantic_hash": ""
-  },
-  "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/test-stubs/server-only.ts": {
-    "mtime": 1779819798.821557,
-    "ast_hash": "b3548eb6c4a45e9e523ba5a5492927e1",
-    "semantic_hash": ""
-  },
-  "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/operator-signature.ts": {
-    "mtime": 1779819542.0065312,
-    "ast_hash": "506085bb049d7d286cf5e0413e489f55",
-    "semantic_hash": ""
-  },
-  "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/operator-signature.test.ts": {
-    "mtime": 1779819753.899873,
-    "ast_hash": "60ccd4654226dfb4403b8f81b2923af0",
     "semantic_hash": ""
   }
 }
