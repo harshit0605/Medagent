@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -248,13 +248,26 @@ class OpsTicketNoteRequest(BaseModel):
 async def acknowledge_ops_ticket(
     ticket_id: str,
     payload: OpsTicketUpdateRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> OpsTicketDTO:
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.actor or "ops",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     ticket = await ops_tickets_repo.acknowledge(
         db,
         _parse_ticket_id(ticket_id),
         at=datetime.now(timezone.utc),
-        actor=payload.actor or "ops",
+        actor=actor,
         notes=payload.notes,
     )
     if ticket is None:
@@ -264,11 +277,14 @@ async def acknowledge_ops_ticket(
 
         await ops_audit.record(
             db,
-            operator_id=payload.actor or "ops",
+            operator_id=actor,
             action=ops_audit.ACTION_TICKET_ACK,
             target_type="ticket",
             target_id=str(ticket.id),
-            details={"notes": (payload.notes or "")[:500]} if payload.notes else {},
+            details={
+                **({"notes": (payload.notes or "")[:500]} if payload.notes else {}),
+                "signed": signed,
+            },
         )
     except Exception:
         log.exception("operator audit failed for ticket_ack %s", ticket_id)
@@ -280,13 +296,26 @@ async def acknowledge_ops_ticket(
 async def resolve_ops_ticket(
     ticket_id: str,
     payload: OpsTicketUpdateRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> OpsTicketDTO:
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.actor or "ops",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     ticket = await ops_tickets_repo.resolve(
         db,
         _parse_ticket_id(ticket_id),
         at=datetime.now(timezone.utc),
-        actor=payload.actor or "ops",
+        actor=actor,
         notes=payload.notes,
     )
     if ticket is None:
@@ -296,11 +325,14 @@ async def resolve_ops_ticket(
 
         await ops_audit.record(
             db,
-            operator_id=payload.actor or "ops",
+            operator_id=actor,
             action=ops_audit.ACTION_TICKET_RESOLVE,
             target_type="ticket",
             target_id=str(ticket.id),
-            details={"notes": (payload.notes or "")[:500]} if payload.notes else {},
+            details={
+                **({"notes": (payload.notes or "")[:500]} if payload.notes else {}),
+                "signed": signed,
+            },
         )
     except Exception:
         log.exception("operator audit failed for ticket_resolve %s", ticket_id)

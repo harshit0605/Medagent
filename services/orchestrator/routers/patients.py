@@ -566,6 +566,8 @@ class BotPauseRequest(BaseModel):
 async def pause_bot_endpoint(
     patient_id: int,
     payload: BotPauseRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> PatientDetailDTO:
     """Mute proactive bot outbound for this patient until ops
@@ -576,9 +578,24 @@ async def pause_bot_endpoint(
 
     Idempotent — re-pausing an already-paused patient updates the
     reason but preserves the original ``bot_paused_at`` timestamp
-    so the audit trail captures when the pause actually started."""
+    so the audit trail captures when the pause actually started.
+
+    Operator identity: resolved via :func:`resolve_actor` — when
+    ``OPS_ACTOR_SIGNATURE_REQUIRED=1`` the ``X-Ops-Actor`` header must
+    carry a valid HMAC signature, else 401."""
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     row = await patients_repo.pause_bot(
-        db, patient_id, actor=payload.actor, reason=payload.reason
+        db, patient_id, actor=actor, reason=payload.reason
     )
     if row is None:
         raise HTTPException(status_code=404, detail="patient not found")
@@ -587,11 +604,11 @@ async def pause_bot_endpoint(
 
         await ops_audit.record(
             db,
-            operator_id=payload.actor,
+            operator_id=actor,
             action=ops_audit.ACTION_PATIENT_PAUSE,
             target_type="patient",
             target_id=patient_id,
-            details={"reason": payload.reason},
+            details={"reason": payload.reason, "signed": signed},
         )
     except Exception:  # noqa: BLE001 — never block a successful action
         log.exception("operator audit failed for patient_pause %s", patient_id)
@@ -663,6 +680,8 @@ class PatientErasureRequest(BaseModel):
 async def erase_patient_endpoint(
     patient_id: int,
     payload: PatientErasureRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Right-of-erasure endpoint. Anonymizes the patient row +
@@ -678,8 +697,13 @@ async def erase_patient_endpoint(
 
     Idempotent: re-erasing an already-erased patient is a no-op
     (returns the existing erased_at unchanged).
+
+    Operator identity: resolved via :func:`resolve_actor` — under
+    ``OPS_ACTOR_SIGNATURE_REQUIRED=1`` an unsigned / mis-signed
+    ``X-Ops-Actor`` returns 401 before any DB mutation.
     """
     from services.orchestrator import patient_erasure
+    from app.operator_signature import resolve_actor
 
     if not payload.confirm:
         raise HTTPException(
@@ -690,10 +714,19 @@ async def erase_patient_endpoint(
             ),
         )
 
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     patient = await patient_erasure.erase_patient_data(
         db,
         patient_id=patient_id,
-        actor=payload.actor,
+        actor=actor,
         reason=payload.reason,
     )
     if patient is None:
@@ -703,13 +736,14 @@ async def erase_patient_endpoint(
 
         await ops_audit.record(
             db,
-            operator_id=payload.actor,
+            operator_id=actor,
             action=ops_audit.ACTION_PATIENT_ERASURE,
             target_type="patient",
             target_id=patient_id,
             details={
                 "reason": payload.reason,
                 "anonymized_phone": patient.phone,
+                "signed": signed,
             },
         )
     except Exception:  # noqa: BLE001 — never block an erasure on audit

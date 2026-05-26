@@ -1957,7 +1957,7 @@ export const orchestrator = {
     call<CarePlanExemption>(
       ORCHESTRATOR_URL,
       `/patients/${patientId}/care-plan-exemptions`,
-      { method: "POST", body },
+      { method: "POST", body, signedActor: body.created_by ?? undefined },
     ),
   revokePatientExemption: (
     exemptionId: number,
@@ -1966,7 +1966,7 @@ export const orchestrator = {
     call<CarePlanExemption>(
       ORCHESTRATOR_URL,
       `/care-plan-exemptions/${exemptionId}/revoke`,
-      { method: "POST", body },
+      { method: "POST", body, signedActor: body.revoked_by ?? undefined },
     ),
 
   // Appointments + recap

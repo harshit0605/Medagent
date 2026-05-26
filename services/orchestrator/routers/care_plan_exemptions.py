@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,8 +104,21 @@ async def list_patient_exemptions(
 async def create_patient_exemption(
     patient_id: int,
     payload: CarePlanExemptionCreateRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> CarePlanExemptionDTO:
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.created_by or "ops",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     patient = await patients_repo.get(db, patient_id)
     if patient is None:
         raise HTTPException(status_code=404, detail="patient not found")
@@ -136,12 +149,12 @@ async def create_patient_exemption(
         care_plan_id=payload.care_plan_id,
         reason=payload.reason,
         expires_at=payload.expires_at,
-        created_by=payload.created_by,
+        created_by=actor,
     )
     try:
         await ops_audit.record(
             db,
-            operator_id=(payload.created_by or "ops"),
+            operator_id=actor,
             action=ops_audit.ACTION_EXEMPTION_GRANT,
             target_type="patient",
             target_id=patient_id,
@@ -154,6 +167,7 @@ async def create_patient_exemption(
                     if payload.expires_at
                     else None
                 ),
+                "signed": signed,
             },
         )
     except Exception:  # noqa: BLE001 — never block a grant on audit
@@ -173,10 +187,23 @@ async def create_patient_exemption(
 async def revoke_patient_exemption(
     exemption_id: int,
     payload: CarePlanExemptionRevokeRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> CarePlanExemptionDTO:
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.revoked_by or "ops",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     row = await care_plan_exemptions_repo.revoke(
-        db, exemption_id, revoked_by=payload.revoked_by
+        db, exemption_id, revoked_by=actor
     )
     if row is None:
         raise HTTPException(status_code=404, detail="exemption not found")
@@ -184,13 +211,14 @@ async def revoke_patient_exemption(
     try:
         await ops_audit.record(
             db,
-            operator_id=(payload.revoked_by or "ops"),
+            operator_id=actor,
             action=ops_audit.ACTION_EXEMPTION_REVOKE,
             target_type="patient",
             target_id=row.patient_id,
             details={
                 "exemption_id": exemption_id,
                 "care_plan_id": row.care_plan_id,
+                "signed": signed,
             },
         )
     except Exception:  # noqa: BLE001
