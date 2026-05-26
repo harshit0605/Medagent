@@ -1,6 +1,8 @@
 # Medagent
 
-WhatsApp-first care concierge scaffold for medication adherence, refills, lab follow-ups, and human escalation.
+WhatsApp-first care concierge for medication adherence, refills, lab follow-ups, doctor inbox + recaps, and human escalation. Live in production at `app.ramkaaj.com` (ops console) and `api.ramkaaj.com` (orchestrator).
+
+**Full feature catalog → [`docs/FEATURES.md`](docs/FEATURES.md)** · Product vision → [`docs/source_of_truth.md`](docs/source_of_truth.md) · Progress log → [`docs/ROADMAP.md`](docs/ROADMAP.md)
 
 ## Architecture
 
