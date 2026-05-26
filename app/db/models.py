@@ -1703,6 +1703,16 @@ class Pregnancy(TimestampMixin, Base):
 
     A partial unique index (migration 20260510_0038) enforces at most one
     ``active`` row per patient while keeping historical ``ended`` rows.
+
+    Postpartum (migration 0048): when an episode ends with
+    ``birth_outcome == 'delivered'`` we record ``delivery_date`` and flip
+    ``postpartum_active = True``. A separate postpartum_milestones sweep
+    walks ``postpartum_active`` rows to materialize early-PP checks,
+    mental-health screens, 6-week visit + contraception counsel, and
+    pediatric-vaccine nudges. A second partial unique index keeps at most
+    one active PP phase per patient. End-of-pregnancy with a non-delivered
+    outcome (miscarriage / stillbirth / termination) does NOT start a PP
+    phase — clinicians can open a bereavement-care ticket instead.
     """
 
     __tablename__ = "pregnancies"
@@ -1722,6 +1732,17 @@ class Pregnancy(TimestampMixin, Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_reason: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # ---- postpartum phase (migration 0048) ---------------------------------
+    delivery_date: Mapped[date | None] = mapped_column(Date)
+    birth_outcome: Mapped[str | None] = mapped_column(String(32))
+    postpartum_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    postpartum_ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    postpartum_ended_reason: Mapped[str | None] = mapped_column(String(255))
 
     patient: Mapped[Patient] = relationship(back_populates="pregnancies")
 

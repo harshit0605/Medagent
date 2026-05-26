@@ -8,7 +8,6 @@ isolation with a mock session; integration tests cover the real-DB path.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

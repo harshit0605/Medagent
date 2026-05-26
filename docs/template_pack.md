@@ -27,6 +27,9 @@
 - lab_closure_update_v1
 - appointment_closure_update_v1
 
+## Postpartum (V3 extension)
+- `postpartum_check_v1` (Utility) — 3 body params: name, postpartum_week, focus. Used by both the postpartum weekly check-in (`postpartum_weekly_due`) and the postpartum milestone reminders (`postpartum_milestone_due` — early visit, EPDS mental-health screen, 6-week visit + contraception counsel, 8-week baby vaccines, 12-week close). Param shape mirrors `pregnancy_weekly_v1` so a single Meta-approved template can serve both phases if needed.
+
 ### Template drafting notes
 - `dose_miss_reason_prompt_v1` should ask for one structured reason only:
   `FORGOT`, `SIDE_EFFECT`, `OUT_OF_STOCK`, `CONFUSED`, `COST`, `OTHER`.

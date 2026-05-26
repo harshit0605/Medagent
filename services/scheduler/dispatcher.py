@@ -55,6 +55,12 @@ _PREGNANCY_MILESTONE_EVENT_TYPES: frozenset[str] = frozenset(
 _PREGNANCY_WEEKLY_EVENT_TYPES: frozenset[str] = frozenset(
     {"pregnancy_weekly_due"}
 )
+_POSTPARTUM_MILESTONE_EVENT_TYPES: frozenset[str] = frozenset(
+    {"postpartum_milestone_due"}
+)
+_POSTPARTUM_WEEKLY_EVENT_TYPES: frozenset[str] = frozenset(
+    {"postpartum_weekly_due"}
+)
 _SUBSTITUTION_EVENT_TYPES: frozenset[str] = frozenset(
     {"order_substitution_request"}
 )
@@ -83,6 +89,10 @@ _FRESHNESS_BY_EVENT: dict[str, timedelta] = {
     # a weekly check-in a day or two late is still useful.
     "pregnancy_milestone_due": timedelta(hours=48),
     "pregnancy_weekly_due": timedelta(hours=48),
+    # Postpartum reminders are similarly forgiving — a "your 6-week visit is
+    # coming up" or weekly check-in a day late is still worth sending.
+    "postpartum_milestone_due": timedelta(hours=48),
+    "postpartum_weekly_due": timedelta(hours=48),
     # A substitution request stays useful for a while — the patient's reorder
     # is blocked until they decide.
     "order_substitution_request": timedelta(hours=48),
@@ -132,6 +142,15 @@ _LAB_TEMPLATE_NAME = os.getenv(
 # approved template; the param shape (1_name / 2_week / 3_focus) is fixed.
 _PREGNANCY_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_PREGNANCY_TEMPLATE_NAME", "pregnancy_weekly_v1"
+)
+# Approved Meta template for outside-CSW postpartum reminders (weekly
+# check-ins + milestone nudges share it). 3 body params: patient name,
+# postpartum-week, and the focus/update line. Override via env to point at a
+# different approved template; the param shape (1_name / 2_week / 3_focus)
+# matches the pregnancy template intentionally so a single Meta-approved
+# template can serve both.
+_POSTPARTUM_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_POSTPARTUM_TEMPLATE_NAME", "postpartum_check_v1"
 )
 # Approved Meta template for outside-CSW substitution-approval requests.
 # 2 body params (original med, proposed substitute) + Approve / Decline
@@ -694,6 +713,145 @@ async def _build_pregnancy_milestone_reminder(
         "template_params": {
             "1_name": name,
             "2_week": str(week),
+            "3_focus": focus,
+        },
+    }
+
+
+async def _assert_postpartum_active(db: AsyncSession, pregnancy_id: Any):
+    """Fetch the pregnancy and confirm it's still in its postpartum phase,
+    else ReminderNotApplicable. A pregnancy whose PP was closed early (or
+    never started — e.g. miscarriage) shouldn't fire PP nudges."""
+    from app.db.repositories import pregnancies as pregnancies_repo
+
+    if not pregnancy_id:
+        raise ValueError("postpartum payload missing pregnancy_id")
+    pregnancy = await pregnancies_repo.get(db, int(pregnancy_id))
+    if pregnancy is None:
+        raise ReminderNotApplicable(f"pregnancy {pregnancy_id} not found")
+    if not pregnancy.postpartum_active:
+        raise ReminderNotApplicable(
+            f"pregnancy {pregnancy_id} postpartum closed — not prompting"
+        )
+    return pregnancy
+
+
+async def _build_postpartum_weekly_reminder(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Build the WhatsApp send for a postpartum_weekly_due check-in.
+
+    In-CSW: freeform text. Out-of-CSW: ``postpartum_check_v1`` template
+    (params: name, postpartum week, this-week's focus line). The param shape
+    mirrors ``pregnancy_weekly_v1`` so a single Meta-approved template can
+    cover both phases if needed.
+    """
+    payload = dict(event.payload or {})
+    await _assert_postpartum_active(db, payload.get("pregnancy_id"))
+
+    week = payload.get("pp_week")
+    focus = payload.get("focus") or ""
+    name = await _patient_first_name(
+        db,
+        patient_db_id=payload.get("patient_db_id"),
+        patient_phone=event.patient_id,
+    )
+
+    body = (
+        f"Hi {name}, you're {week} week(s) postpartum. {focus}".strip()
+    )
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+        }
+
+    log.info(
+        "postpartum weekly %s: out-of-CSW for patient %s — using template %s",
+        event.id,
+        event.patient_id,
+        _POSTPARTUM_TEMPLATE_NAME,
+    )
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _POSTPARTUM_TEMPLATE_NAME,
+        "template_params": {
+            "1_name": name,
+            "2_week": str(week),
+            "3_focus": focus,
+        },
+    }
+
+
+async def _build_postpartum_milestone_reminder(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Build the WhatsApp send for a postpartum_milestone_due reminder
+    (early PP visit / EPDS screen / 6-week visit + contraception / baby
+    vaccines / final close).
+
+    In-CSW: freeform text. Out-of-CSW: the shared ``postpartum_check_v1``
+    template, with the milestone rendered into the focus param. We render
+    PP age in weeks (or days if <1 week) to match how clinicians describe
+    early postpartum timing.
+    """
+    payload = dict(event.payload or {})
+    await _assert_postpartum_active(db, payload.get("pregnancy_id"))
+
+    pp_day = payload.get("pp_day") or 0
+    title = payload.get("title") or "a postpartum check-in"
+    detail = payload.get("detail") or ""
+    name = await _patient_first_name(
+        db,
+        patient_db_id=payload.get("patient_db_id"),
+        patient_phone=event.patient_id,
+    )
+
+    # Render PP age in weeks for ≥7 days, else "day N" — matches how patients
+    # think about early-postpartum timing.
+    if pp_day < 7:
+        age_phrase = f"day {pp_day}"
+        template_week = "0"
+    else:
+        weeks = pp_day // 7
+        age_phrase = f"{weeks} week(s) postpartum"
+        template_week = str(weeks)
+
+    focus = f"{title}: {detail}" if detail else title
+    body = (
+        f"Hi {name}, you're around {age_phrase} — time for {title.lower()}"
+        + (f" ({detail})" if detail else "")
+        + ". Reply HELP if you'd like us to help arrange it."
+    )
+
+    in_csw = (not _FORCE_TEMPLATE) and await _patient_in_csw(db, event.patient_id)
+    if in_csw:
+        return {
+            "patient_id": event.patient_id,
+            "body": body,
+            "use_template": False,
+        }
+
+    log.info(
+        "postpartum milestone %s (%s): out-of-CSW for patient %s — template %s",
+        event.id,
+        payload.get("milestone_key"),
+        event.patient_id,
+        _POSTPARTUM_TEMPLATE_NAME,
+    )
+    return {
+        "patient_id": event.patient_id,
+        "body": body,
+        "use_template": True,
+        "template_name": _POSTPARTUM_TEMPLATE_NAME,
+        "template_params": {
+            "1_name": name,
+            "2_week": template_week,
             "3_focus": focus,
         },
     }
@@ -1384,6 +1542,18 @@ async def dispatch(
                     f"pregnancy weekly dispatch requires db (event {event.id})"
                 )
             message = await _build_pregnancy_weekly_reminder(db, event)
+        elif event.event_type in _POSTPARTUM_MILESTONE_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"postpartum milestone dispatch requires db (event {event.id})"
+                )
+            message = await _build_postpartum_milestone_reminder(db, event)
+        elif event.event_type in _POSTPARTUM_WEEKLY_EVENT_TYPES:
+            if db is None:
+                raise ValueError(
+                    f"postpartum weekly dispatch requires db (event {event.id})"
+                )
+            message = await _build_postpartum_weekly_reminder(db, event)
         elif event.event_type in _SUBSTITUTION_EVENT_TYPES:
             if db is None:
                 raise ValueError(

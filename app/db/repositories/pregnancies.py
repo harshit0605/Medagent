@@ -83,9 +83,21 @@ async def end_pregnancy(
     *,
     reason: str | None = None,
     at: datetime | None = None,
+    birth_outcome: str | None = None,
+    delivery_date: date | None = None,
 ) -> Pregnancy | None:
     """Close a pregnancy episode (delivered / miscarried / corrected). The
-    milestone sweep ignores ended rows, so this stops further reminders."""
+    milestone sweep ignores ended rows, so this stops further pregnancy
+    reminders.
+
+    When ``birth_outcome == 'delivered'`` and ``delivery_date`` is provided,
+    the row's postpartum lifecycle stays untouched here — call
+    :func:`start_postpartum` (typically right after, from the same endpoint)
+    to flip ``postpartum_active = True`` and begin the PP cadence. Keeping
+    the two steps separate lets the caller decide (e.g. an operator who
+    closes a pregnancy as ``delivered`` may still want a manual review
+    before kicking off PP nudges).
+    """
     row = await session.get(Pregnancy, pregnancy_id)
     if row is None:
         return None
@@ -93,5 +105,104 @@ async def end_pregnancy(
     row.ended_at = at or datetime.now(timezone.utc)
     if reason:
         row.ended_reason = reason[:255]
+    if birth_outcome is not None:
+        row.birth_outcome = birth_outcome[:32]
+    if delivery_date is not None:
+        row.delivery_date = delivery_date
+    await session.flush()
+    return row
+
+
+# ---- postpartum lifecycle --------------------------------------------------
+
+
+async def get_postpartum_active_for_patient(
+    session: AsyncSession, patient_id: int
+) -> Pregnancy | None:
+    """The patient's current active postpartum episode (the previously-ended
+    pregnancy now in its PP phase), or ``None``. The partial unique index
+    ``uq_pregnancies_patient_postpartum_active`` guarantees at most one."""
+    stmt = (
+        select(Pregnancy)
+        .where(Pregnancy.patient_id == patient_id)
+        .where(Pregnancy.postpartum_active.is_(True))
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
+async def list_postpartum_active(session: AsyncSession) -> list[Pregnancy]:
+    """All postpartum-active pregnancies (PP-sweep entry point)."""
+    stmt = select(Pregnancy).where(Pregnancy.postpartum_active.is_(True))
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def start_postpartum(
+    session: AsyncSession,
+    pregnancy_id: int,
+    *,
+    delivery_date: date,
+) -> Pregnancy | None:
+    """Flip an ended pregnancy into its postpartum phase.
+
+    Requires that the pregnancy is already ``ENDED`` and that
+    ``birth_outcome == 'delivered'`` (set via :func:`end_pregnancy`).
+    Idempotent: re-calling on a row that's already PP-active is a no-op.
+    Raises ``ValueError`` if the patient already has a different PP-active
+    row (the partial unique index would also catch this, but we want a
+    friendly app-level error).
+    """
+    row = await session.get(Pregnancy, pregnancy_id)
+    if row is None:
+        return None
+    if row.postpartum_active:
+        return row
+    if row.status != ENDED:
+        raise ValueError(
+            f"pregnancy {pregnancy_id} is not ended (status={row.status}); "
+            "call end_pregnancy first"
+        )
+    if row.birth_outcome != "delivered":
+        raise ValueError(
+            f"pregnancy {pregnancy_id} birth_outcome is "
+            f"{row.birth_outcome!r}; postpartum cadence only applies to "
+            "'delivered'"
+        )
+    existing_pp = await get_postpartum_active_for_patient(
+        session, row.patient_id
+    )
+    if existing_pp is not None and existing_pp.id != pregnancy_id:
+        raise ValueError(
+            f"patient {row.patient_id} already has an active postpartum "
+            f"episode (id={existing_pp.id}); end it before starting another"
+        )
+    row.delivery_date = delivery_date
+    row.postpartum_active = True
+    await session.flush()
+    return row
+
+
+async def end_postpartum(
+    session: AsyncSession,
+    pregnancy_id: int,
+    *,
+    reason: str | None = None,
+    at: datetime | None = None,
+) -> Pregnancy | None:
+    """Close a postpartum episode. The PP sweep ignores rows with
+    ``postpartum_active = False``, so this stops further PP reminders.
+    Idempotent: re-calling on an already-closed row leaves the original
+    ``postpartum_ended_at`` timestamp untouched (the FIRST close is the
+    legally-relevant moment)."""
+    row = await session.get(Pregnancy, pregnancy_id)
+    if row is None:
+        return None
+    if not row.postpartum_active and row.postpartum_ended_at is not None:
+        # Already closed — preserve original timestamp.
+        return row
+    row.postpartum_active = False
+    row.postpartum_ended_at = at or datetime.now(timezone.utc)
+    if reason:
+        row.postpartum_ended_reason = reason[:255]
     await session.flush()
     return row
