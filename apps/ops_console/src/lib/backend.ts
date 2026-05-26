@@ -15,6 +15,8 @@
 
 import "server-only";
 
+import { actorHeaders } from "./operator-signature";
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL ?? "http://localhost:8002";
 const SCHEDULER_URL = process.env.SCHEDULER_URL ?? "http://localhost:8003";
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:8001";
@@ -32,6 +34,12 @@ type FetchOptions = {
   // endpoints (DSAR export, LLM draft) while still bounding a hung backend
   // so a request can't pin a server worker indefinitely.
   timeoutMs?: number;
+  // Operator identity for privileged endpoints (DSAR export, erasure,
+  // pause/unpause, ticket lifecycle, exemption grant/revoke). When set we
+  // add X-Ops-Actor and, when OPS_ACTOR_SIGNING_KEY is configured, the
+  // HMAC-SHA256 signature in X-Ops-Actor-Signature. The orchestrator
+  // verifies the signature when OPS_ACTOR_SIGNATURE_REQUIRED=1.
+  signedActor?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -53,6 +61,9 @@ async function call<T>(base: string, path: string, opts: FetchOptions = {}): Pro
   } else if (GATEWAY_API_KEY && base === GATEWAY_URL) {
     headers["x-api-key"] = GATEWAY_API_KEY;
   }
+  // Attach (and possibly sign) the operator-actor headers for privileged
+  // calls. No-op when signedActor is unset.
+  Object.assign(headers, actorHeaders(opts.signedActor));
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const init: RequestInit = {
     method: opts.method ?? "GET",
@@ -1169,11 +1180,13 @@ export const orchestrator = {
     call<OpsTicket>(ORCHESTRATOR_URL, `/ops/tickets/${ticketId}/ack`, {
       method: "POST",
       body,
+      signedActor: body.actor,
     }),
   resolveTicket: (ticketId: string, body: { actor?: string; notes?: string } = {}) =>
     call<OpsTicket>(ORCHESTRATOR_URL, `/ops/tickets/${ticketId}/resolve`, {
       method: "POST",
       body,
+      signedActor: body.actor,
     }),
   assignTicket: (
     ticketId: string,
@@ -1384,13 +1397,13 @@ export const orchestrator = {
     call<PatientDetail>(
       ORCHESTRATOR_URL,
       `/patients/${patientId}/pause-bot`,
-      { method: "POST", body },
+      { method: "POST", body, signedActor: body.actor },
     ),
-  unpauseBot: (patientId: number) =>
+  unpauseBot: (patientId: number, opts: { actor?: string } = {}) =>
     call<PatientDetail>(
       ORCHESTRATOR_URL,
       `/patients/${patientId}/unpause-bot`,
-      { method: "POST" },
+      { method: "POST", signedActor: opts.actor },
     ),
   // Right-of-erasure. Irreversible — the UI must guard with a
   // hard-confirm modal before invoking. The endpoint also requires
@@ -1406,10 +1419,13 @@ export const orchestrator = {
     }>(ORCHESTRATOR_URL, `/patients/${patientId}/erase`, {
       method: "POST",
       body,
+      signedActor: body.actor,
     }),
   // DSAR right-of-access export. Returns the assembled JSON
   // document; the UI converts it to a downloadable Blob locally
-  // so the browser triggers a normal download dialog.
+  // so the browser triggers a normal download dialog. Signs the actor
+  // header (when OPS_ACTOR_SIGNING_KEY is configured) so the
+  // operator_actions audit row carries a verified identity.
   exportPatient: (
     patientId: number,
     params: { actor?: string; window_days?: number } = {},
@@ -1417,7 +1433,7 @@ export const orchestrator = {
     call<Record<string, unknown>>(
       ORCHESTRATOR_URL,
       `/patients/${patientId}/export`,
-      { query: params },
+      { query: params, signedActor: params.actor },
     ),
   // Broadcast campaigns — cohort bulk-send.
   listBroadcastCampaigns: (params: { limit?: number } = {}) =>

@@ -606,11 +606,33 @@ async def pause_bot_endpoint(
 async def unpause_bot_endpoint(
     patient_id: int,
     x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> PatientDetailDTO:
     """Clear the ops-initiated bot pause. Outbound resumes on the
     next dispatcher tick. Patient is not notified — pause / unpause
-    are invisible by design."""
+    are invisible by design.
+
+    Operator identity: when ``OPS_ACTOR_SIGNING_KEY`` is set the ops console
+    signs the actor (``X-Ops-Actor``) with HMAC-SHA256 and sends the hex
+    signature in ``X-Ops-Actor-Signature``. When
+    ``OPS_ACTOR_SIGNATURE_REQUIRED=1`` an unsigned / mis-signed header
+    returns 401. Both flags off → backward-compatible caller-asserted
+    semantics; the operator_actions row records ``signed=False``.
+    """
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback="ops",
+        )
+    except ValueError as exc:
+        # resolve_actor raises ``ValueError("401:...")`` when required-mode
+        # rejects the input — surface as HTTP 401.
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     row = await patients_repo.unpause_bot(db, patient_id)
     if row is None:
         raise HTTPException(status_code=404, detail="patient not found")
@@ -619,11 +641,11 @@ async def unpause_bot_endpoint(
 
         await ops_audit.record(
             db,
-            operator_id=(x_ops_actor or "ops").strip()[:128],
+            operator_id=actor.strip()[:128],
             action=ops_audit.ACTION_PATIENT_UNPAUSE,
             target_type="patient",
             target_id=patient_id,
-            details={},
+            details={"signed": signed},
         )
     except Exception:  # noqa: BLE001
         log.exception("operator audit failed for patient_unpause %s", patient_id)
@@ -709,6 +731,7 @@ async def export_patient_data(
     window_days: int = 365,
     actor: str = "ops",
     x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """DSAR right-of-access endpoint. Returns a single JSON document
@@ -727,9 +750,12 @@ async def export_patient_data(
     where it leaks into access logs / proxies / browser history. The query
     param is kept as a backward-compatible fallback.
 
-    NOTE: under the current shared-API-key model the actor is caller-asserted
-    (there is no per-operator identity to bind it to); strong attribution
-    requires an authentication layer. Tracked as a follow-up.
+    Operator identity: when ``OPS_ACTOR_SIGNING_KEY`` is configured the ops
+    console signs the actor with HMAC-SHA256 and sends the hex digest in
+    ``X-Ops-Actor-Signature``. ``OPS_ACTOR_SIGNATURE_REQUIRED=1`` makes a
+    valid signature mandatory (mis-signed → 401). When neither flag is set
+    the endpoint falls back to caller-asserted semantics and the
+    ``operator_actions.details["signed"]`` flag records the trust level.
 
     Parameters:
         window_days: how far back time-bounded sections (adherence,
@@ -739,12 +765,23 @@ async def export_patient_data(
     """
     from services.orchestrator import patient_export
 
+    from app.operator_signature import resolve_actor
+
+    try:
+        signed_actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
     if window_days <= 0 or window_days > 3650:
         raise HTTPException(
             status_code=400,
             detail="window_days must be between 1 and 3650",
         )
-    resolved_actor = (x_ops_actor or actor or "").strip()
+    resolved_actor = signed_actor.strip()
     if not resolved_actor or len(resolved_actor) > 128:
         raise HTTPException(
             status_code=400, detail="actor required (max 128 chars)"
@@ -770,6 +807,7 @@ async def export_patient_data(
             details={
                 "window_days": window_days,
                 "header_actor": bool(x_ops_actor),
+                "signed": signed,
             },
         )
     except Exception:  # noqa: BLE001

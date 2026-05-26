@@ -6,6 +6,7 @@ plan's standing order (with a reason + optional expiry), revocable by ops.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,8 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import care_plan_exemptions as care_plan_exemptions_repo
 from app.db.repositories import care_plans as care_plans_repo
+from app.db.repositories import operator_actions as ops_audit
 from app.db.repositories import patients as patients_repo
 from app.db.session import get_session
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -134,6 +138,30 @@ async def create_patient_exemption(
         expires_at=payload.expires_at,
         created_by=payload.created_by,
     )
+    try:
+        await ops_audit.record(
+            db,
+            operator_id=(payload.created_by or "ops"),
+            action=ops_audit.ACTION_EXEMPTION_GRANT,
+            target_type="patient",
+            target_id=patient_id,
+            details={
+                "exemption_id": row.id,
+                "care_plan_id": payload.care_plan_id,
+                "reason": payload.reason[:500],
+                "expires_at": (
+                    payload.expires_at.isoformat()
+                    if payload.expires_at
+                    else None
+                ),
+            },
+        )
+    except Exception:  # noqa: BLE001 — never block a grant on audit
+        log.exception(
+            "operator audit failed for exemption_grant patient=%s plan=%s",
+            patient_id,
+            payload.care_plan_id,
+        )
     await db.commit()
     return _exemption_to_dto(row, plan=plan)
 
@@ -153,5 +181,22 @@ async def revoke_patient_exemption(
     if row is None:
         raise HTTPException(status_code=404, detail="exemption not found")
     plan = await care_plans_repo.get(db, row.care_plan_id)
+    try:
+        await ops_audit.record(
+            db,
+            operator_id=(payload.revoked_by or "ops"),
+            action=ops_audit.ACTION_EXEMPTION_REVOKE,
+            target_type="patient",
+            target_id=row.patient_id,
+            details={
+                "exemption_id": exemption_id,
+                "care_plan_id": row.care_plan_id,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        log.exception(
+            "operator audit failed for exemption_revoke exemption=%s",
+            exemption_id,
+        )
     await db.commit()
     return _exemption_to_dto(row, plan=plan)

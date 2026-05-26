@@ -335,6 +335,20 @@ def test_endpoint_create_then_revoke(orchestrator_client):
     ).json()
     assert any(e["id"] == exemption_id for e in inclusive)
 
+    # Both grant + revoke wrote an operator_actions row (patient-scoped).
+    from app.db.repositories import operator_actions as ops_audit
+
+    async def _check_audit() -> list[str]:
+        async with SessionLocal() as db:
+            rows = await ops_audit.list_for_target(
+                db, target_type="patient", target_id=patient_id
+            )
+        return [r.action for r in rows]
+
+    actions = asyncio.get_event_loop().run_until_complete(_check_audit())
+    assert ops_audit.ACTION_EXEMPTION_GRANT in actions
+    assert ops_audit.ACTION_EXEMPTION_REVOKE in actions
+
 
 def test_endpoint_404_for_unknown_patient(orchestrator_client):
     r = orchestrator_client.post(
