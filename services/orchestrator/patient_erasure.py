@@ -152,6 +152,13 @@ async def erase_patient_data(
     original_phone = patient.phone
     new_phone = _anonymized_phone(patient.id)
 
+    # Invalidate the session-scoped phone cache so subsequent
+    # ``get_by_phone(original_phone)`` calls in this session don't return
+    # the erased row from the in-session memo.
+    from app.db.repositories.patients import _invalidate_phone
+
+    _invalidate_phone(db, original_phone)
+
     # 1. Patient row.
     patient.full_name = _ERASED_TOKEN
     patient.phone = new_phone

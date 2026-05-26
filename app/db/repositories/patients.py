@@ -7,10 +7,51 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Patient
 
+# Session-scoped memoization key for ``get_by_phone`` lookups. We attach to
+# ``AsyncSession.info`` (a dict that lives for the session's lifetime) so the
+# cache is automatically invalidated when the session closes — no manual TTL,
+# no cross-session ORM-identity pitfalls.
+#
+# Why this matters: on every inbound WhatsApp message, ``/route`` looks up the
+# patient by phone to read ``preferred_language``, and then 4–7 downstream
+# handlers do the same lookup (dose_handler, refill_handler, vitals_handler,
+# etc. — see callers of ``get_by_phone``). Memoizing within the request
+# collapses those to a single round-trip. Reads-after-write inside the same
+# session see fresh data because mutations go through the SQLAlchemy identity
+# map on the cached row.
+_PATIENT_BY_PHONE_CACHE_KEY = "_medagent_patient_by_phone_cache"
+
+
+def _phone_cache(session: AsyncSession) -> dict[str, Patient | None]:
+    cache = session.info.get(_PATIENT_BY_PHONE_CACHE_KEY)
+    if cache is None:
+        cache = {}
+        session.info[_PATIENT_BY_PHONE_CACHE_KEY] = cache
+    return cache
+
+
+def _invalidate_phone(session: AsyncSession, phone: str) -> None:
+    """Drop ``phone`` from the per-session cache.
+
+    Call after writes that create / delete a patient row keyed by phone
+    (``upsert_by_phone`` insert path; erasure flow). Field-level mutations
+    don't need invalidation — they're applied to the same ORM row via the
+    identity map and the next ``get_by_phone`` returns the cached, now-mutated
+    instance.
+    """
+    cache = session.info.get(_PATIENT_BY_PHONE_CACHE_KEY)
+    if cache is not None:
+        cache.pop(phone, None)
+
 
 async def get_by_phone(session: AsyncSession, phone: str) -> Patient | None:
+    cache = _phone_cache(session)
+    if phone in cache:
+        return cache[phone]
     stmt = select(Patient).where(Patient.phone == phone)
-    return (await session.execute(stmt)).scalar_one_or_none()
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    cache[phone] = row
+    return row
 
 
 async def get(session: AsyncSession, patient_id: int) -> Patient | None:
@@ -49,6 +90,10 @@ async def upsert_by_phone(
     session.add(row)
     await session.flush()
     await session.refresh(row)
+    # The cached lookup above just stored ``None``; replace it with the new
+    # row so a sibling call inside the same session sees the just-created
+    # patient instead of re-querying or (worse) believing they don't exist.
+    _phone_cache(session)[phone] = row
     return row
 
 

@@ -988,6 +988,11 @@ class ClinicalAlert(Base):
             "created_at",
         ),
         Index("ix_clinical_alerts_patient", "patient_id"),
+        # Repager + ops dashboard query open alerts per patient — leading
+        # ``patient_id`` lets the (patient_id)-only index alone work, but the
+        # composite with status drops the second filter to an index probe.
+        # Migration 0047.
+        Index("ix_clinical_alerts_patient_status", "patient_id", "status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -1136,6 +1141,15 @@ class MetricObservation(Base):
             "ix_metric_observations_source_observed",
             "source",
             "observed_at",
+        ),
+        # Care-plan-goal history view paginates newest-first with LIMIT;
+        # a DESC-built variant lets Postgres satisfy the LIMIT without a
+        # backward scan. Created via raw DDL in migration 0047 (alembic's
+        # ``op.create_index`` doesn't model per-column ASC/DESC ordering).
+        Index(
+            "ix_metric_observations_goal_observed_desc",
+            "goal_id",
+            text("observed_at DESC"),
         ),
     )
 

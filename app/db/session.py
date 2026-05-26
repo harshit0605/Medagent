@@ -33,20 +33,17 @@ def _build_engine() -> AsyncEngine:
     # env vars so a deployment doesn't have to ship with
     # test-friendly defaults.
     #
-    # Production: 5 + 5 overflow = 10 max. Plenty for the
-    # FastAPI worker count (uvicorn 1-2 workers per pod) and
-    # well under Supabase pgbouncer's transaction-mode pool
-    # cap.
+    # Production: 10 + 10 overflow = 20 max per process. Bumped from the
+    # original 5/5 after a perf audit flagged pool starvation as a likely
+    # cause of cascading timeouts under sustained load — with multiple
+    # replicas + the scheduler process holding its own pool, 10 max per
+    # process saturates pgbouncer's per-app pool fast. 20 still sits
+    # comfortably under Supabase's typical 30-conn-per-app cap.
     #
-    # Tests: bumped to 10 + 10 = 20 max. The full integration
-    # suite spins up many module-scoped TestClient fixtures
-    # that each open + hold connections during fixture
-    # lifetime; the prod-default 10 starves quickly when 5+
-    # files run sequentially in a single process. 20 stays
-    # under Supabase's typical 30 cap while giving the suite
-    # headroom for concurrent fixture lifetimes.
-    pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
-    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "5"))
+    # Tests already pin DB_POOL_SIZE=10 / DB_MAX_OVERFLOW=10 explicitly
+    # in conftest, so prod-default bumps don't change test behaviour.
+    pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
+    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
     return create_async_engine(
         url,
         pool_pre_ping=True,
