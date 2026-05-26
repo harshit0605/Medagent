@@ -179,7 +179,16 @@ class ParsePrescriptionResult(BaseModel):
 
 
 class AgentLLM:
-    """Async LLM client for the orchestrator agent workflow."""
+    """Async LLM client for the orchestrator agent workflow.
+
+    Wrapped in a process-local :class:`~app.circuit_breaker.CircuitBreaker`
+    so a degraded upstream (OpenAI 5xx, sustained timeouts, expired API key)
+    short-circuits to the deterministic fallback path after
+    ``LLM_BREAKER_THRESHOLD`` consecutive failures, instead of paying the
+    full ``LLM_TIMEOUT_SECONDS`` × N round-trips per inbound. After
+    ``LLM_BREAKER_RESET_SECONDS`` the breaker half-opens and probes a
+    single call to test recovery.
+    """
 
     def __init__(
         self,
@@ -189,6 +198,8 @@ class AgentLLM:
         timeout_seconds: float | None = None,
         enabled: bool | None = None,
     ) -> None:
+        from app.circuit_breaker import CircuitBreaker
+
         self.api_key = api_key if api_key is not None else os.getenv("OPENAI_API_KEY")
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.timeout_seconds = (
@@ -200,8 +211,20 @@ class AgentLLM:
             enabled = os.getenv("LLM_ENABLED", "1") != "0"
         self.enabled = bool(enabled and self.api_key)
         self._client = None
+        self._breaker = CircuitBreaker(
+            name="llm",
+            threshold=int(os.getenv("LLM_BREAKER_THRESHOLD", "5")),
+            reset_after_seconds=float(
+                os.getenv("LLM_BREAKER_RESET_SECONDS", "120")
+            ),
+        )
 
     def _get_client(self):
+        # Circuit-open: behave exactly like a disabled client so every existing
+        # caller's ``if client is None: return None`` short-circuits to the
+        # deterministic fallback without further changes.
+        if self._breaker.is_open():
+            return None
         if self._client is None:
             try:
                 from openai import AsyncOpenAI
@@ -211,6 +234,15 @@ class AgentLLM:
                 return None
             self._client = AsyncOpenAI(api_key=self.api_key, timeout=self.timeout_seconds)
         return self._client
+
+    def _record_llm_success(self) -> None:
+        """Public callers should record success/failure via these so the
+        breaker tracks dependency health across every LLM method without
+        each method having to know about the breaker shape."""
+        self._breaker.record_success()
+
+    def _record_llm_failure(self) -> None:
+        self._breaker.record_failure()
 
     async def classify_intent(self, text: str) -> Intent | None:
         if not self.enabled or not text:
@@ -233,12 +265,14 @@ class AgentLLM:
                     ],
                 )
                 tracker.set_completion(completion)
+            self._record_llm_success()
             parsed: IntentClassification | None = completion.choices[0].message.parsed
             if parsed is None:
                 return None
             return parsed.intent
         except Exception as exc:  # noqa: BLE001 — fallback semantics
             log.warning("LLM intent classification failed: %s", exc)
+            self._record_llm_failure()
             return None
 
     async def detect_language(self, text: str) -> tuple[str, str] | None:
@@ -306,12 +340,14 @@ class AgentLLM:
                     ],
                 )
                 tracker.set_completion(completion)
+            self._record_llm_success()
             parsed: DetectedLanguage | None = completion.choices[0].message.parsed
             if parsed is None:
                 return None
             return parsed.code, parsed.confidence
         except Exception as exc:  # noqa: BLE001 — fallback semantics
             log.warning("LLM language detection failed: %s", exc)
+            self._record_llm_failure()
             return None
 
     async def augment_safety(
@@ -342,6 +378,7 @@ class AgentLLM:
                     ],
                 )
                 tracker.set_completion(completion)
+            self._record_llm_success()
             parsed: SafetyAssessment | None = completion.choices[0].message.parsed
             if parsed is None:
                 return None
@@ -352,6 +389,7 @@ class AgentLLM:
             return parsed.severity, parsed.reason.strip().lower().replace(" ", "_")
         except Exception as exc:  # noqa: BLE001
             log.warning("LLM safety augmentation failed: %s", exc)
+            self._record_llm_failure()
             return None
 
     async def chat_with_tools(
@@ -388,6 +426,7 @@ class AgentLLM:
                     temperature=temperature,
                 )
                 tracker.set_completion(completion)
+            self._record_llm_success()
             msg = completion.choices[0].message
             out: dict[str, Any] = {"role": "assistant", "content": msg.content}
             if msg.tool_calls:
@@ -405,6 +444,7 @@ class AgentLLM:
             return out
         except Exception as exc:  # noqa: BLE001
             log.warning("LLM chat_with_tools failed: %s", exc)
+            self._record_llm_failure()
             return None
 
     async def parse_prescription_image(
@@ -452,12 +492,14 @@ class AgentLLM:
                     ],
                 )
                 tracker.set_completion(completion)
+            self._record_llm_success()
             parsed: ParsedPrescription | None = completion.choices[0].message.parsed
             if parsed is None:
                 return None
             return ParsePrescriptionResult(parsed=parsed, used_model=vision_model)
         except Exception as exc:  # noqa: BLE001 — fallback semantics
             log.warning("LLM prescription parse failed: %s", exc)
+            self._record_llm_failure()
             return None
 
     async def compose_reply(
@@ -526,6 +568,7 @@ class AgentLLM:
                     messages=messages,
                 )
                 tracker.set_completion(completion)
+            self._record_llm_success()
             parsed: ComposedReply | None = completion.choices[0].message.parsed
             if parsed is None:
                 return None
@@ -539,6 +582,7 @@ class AgentLLM:
             return body[:500]
         except Exception as exc:  # noqa: BLE001
             log.warning("LLM compose failed: %s", exc)
+            self._record_llm_failure()
             return None
 
 

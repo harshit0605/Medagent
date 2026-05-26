@@ -224,6 +224,33 @@ async def _record_heartbeat(
         log.exception("heartbeat write failed for %s; continuing", component)
 
 
+# ---- per-sweep circuit breakers --------------------------------------------
+# Each sweep loop guards its runner with a process-local CircuitBreaker. When
+# a sweep raises ``SWEEP_BREAKER_THRESHOLD`` consecutive exceptions the
+# breaker opens for ``SWEEP_BREAKER_RESET_SECONDS``; the loop continues
+# heartbeating ``circuit_open`` so the service-health reconciler can surface
+# the paused state, but skips the actual runner call until the reset window
+# elapses (then half-opens for a probe). Prevents a deterministically-broken
+# sweep from spamming logs / DLQ for hours.
+_SWEEP_BREAKERS: dict[str, "Any"] = {}
+
+
+def _sweep_breaker(name: str):
+    from app.circuit_breaker import CircuitBreaker
+
+    cb = _SWEEP_BREAKERS.get(name)
+    if cb is None:
+        cb = CircuitBreaker(
+            name=name,
+            threshold=int(os.getenv("SWEEP_BREAKER_THRESHOLD", "5")),
+            reset_after_seconds=float(
+                os.getenv("SWEEP_BREAKER_RESET_SECONDS", "600")
+            ),
+        )
+        _SWEEP_BREAKERS[name] = cb
+    return cb
+
+
 def _heartbeat_details_safe(value: Any) -> dict[str, Any]:
     """Normalise heartbeat details to a JSON-friendly dict. Some loops
     return nested dicts (recap sweep) and some return flat counters
@@ -397,24 +424,34 @@ async def _dose_materialize_loop(stop_event: asyncio.Event, interval: float) -> 
         "dose+refill materialize loop started (interval=%ss)", interval
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_dose_materialize_once()
-            if (
-                result.get("new_dose_events", 0) > 0
-                or result.get("new_refill_events", 0) > 0
-                or result.get("new_lab_followup_events", 0) > 0
-            ):
-                log.info("materializer pass: %s", result)
+        breaker = _sweep_breaker("scheduler.dose_materialize")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.dose_materialize",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("dose+refill materialize tick raised; continuing")
-            await _record_heartbeat(
-                "scheduler.dose_materialize", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_dose_materialize_once()
+                if (
+                    result.get("new_dose_events", 0) > 0
+                    or result.get("new_refill_events", 0) > 0
+                    or result.get("new_lab_followup_events", 0) > 0
+                ):
+                    log.info("materializer pass: %s", result)
+                await _record_heartbeat(
+                    "scheduler.dose_materialize",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("dose+refill materialize tick raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.dose_materialize", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -427,20 +464,30 @@ async def _missed_dose_sweep_loop(
 ) -> None:
     log.info("missed-dose sweep loop started (interval=%ss)", interval)
     while not stop_event.is_set():
-        try:
-            result = await _run_missed_dose_sweep_once()
-            if result.get("marked_missed", 0) > 0 or result.get("escalated", 0) > 0:
-                log.info("missed-dose sweep: %s", result)
+        breaker = _sweep_breaker("scheduler.missed_dose_sweep")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.missed_dose_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("missed-dose sweep raised; continuing")
-            await _record_heartbeat(
-                "scheduler.missed_dose_sweep", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_missed_dose_sweep_once()
+                if result.get("marked_missed", 0) > 0 or result.get("escalated", 0) > 0:
+                    log.info("missed-dose sweep: %s", result)
+                await _record_heartbeat(
+                    "scheduler.missed_dose_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("missed-dose sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.missed_dose_sweep", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -453,23 +500,33 @@ async def _recap_sweep_loop(
 ) -> None:
     log.info("recap sweep loop started (interval=%ss)", interval)
     while not stop_event.is_set():
-        try:
-            result = await _run_recap_sweep_once()
-            if (
-                result.get("missing", {}).get("opened", 0) > 0
-                or result.get("unacked", {}).get("enqueued", 0) > 0
-            ):
-                log.info("recap sweep: %s", result)
+        breaker = _sweep_breaker("scheduler.recap_sweep")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.recap_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("recap sweep raised; continuing")
-            await _record_heartbeat(
-                "scheduler.recap_sweep", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_recap_sweep_once()
+                if (
+                    result.get("missing", {}).get("opened", 0) > 0
+                    or result.get("unacked", {}).get("enqueued", 0) > 0
+                ):
+                    log.info("recap sweep: %s", result)
+                await _record_heartbeat(
+                    "scheduler.recap_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("recap sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.recap_sweep", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -484,24 +541,34 @@ async def _service_health_reconcile_loop(
         "service-health reconciler loop started (interval=%ss)", interval
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_service_health_reconcile_once()
-            if (
-                result.get("stale_opened", 0) > 0
-                or result.get("errored_opened", 0) > 0
-                or result.get("failed_burst_opened", 0) > 0
-            ):
-                log.warning("service-health reconciler opened tickets: %s", result)
+        breaker = _sweep_breaker("scheduler.service_health_reconcile")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.service_health_reconcile",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("service-health reconciler raised; continuing")
-            await _record_heartbeat(
-                "scheduler.service_health_reconcile", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_service_health_reconcile_once()
+                if (
+                    result.get("stale_opened", 0) > 0
+                    or result.get("errored_opened", 0) > 0
+                    or result.get("failed_burst_opened", 0) > 0
+                ):
+                    log.warning("service-health reconciler opened tickets: %s", result)
+                await _record_heartbeat(
+                    "scheduler.service_health_reconcile",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("service-health reconciler raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.service_health_reconcile", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -514,24 +581,34 @@ async def _sla_breach_sweep_loop(
 ) -> None:
     log.info("SLA breach sweep loop started (interval=%ss)", interval)
     while not stop_event.is_set():
-        try:
-            result = await _run_sla_breach_sweep_once()
-            if result.get("breached", 0) > 0:
-                log.warning(
-                    "SLA breach sweep stamped %d ticket(s): %s",
-                    result["breached"],
-                    result,
-                )
+        breaker = _sweep_breaker("scheduler.sla_breach_sweep")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.sla_breach_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("SLA breach sweep raised; continuing")
-            await _record_heartbeat(
-                "scheduler.sla_breach_sweep", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_sla_breach_sweep_once()
+                if result.get("breached", 0) > 0:
+                    log.warning(
+                        "SLA breach sweep stamped %d ticket(s): %s",
+                        result["breached"],
+                        result,
+                    )
+                await _record_heartbeat(
+                    "scheduler.sla_breach_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("SLA breach sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.sla_breach_sweep", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -546,28 +623,38 @@ async def _goal_drift_sweep_loop(
         "goal-drift sweep loop started (interval=%ss)", interval
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_goal_drift_sweep_once()
-            if (
-                result.get("opened", 0) > 0
-                or result.get("resolved", 0) > 0
-            ):
-                log.info(
-                    "goal drift sweep: %d opened, %d resolved (%s)",
-                    result["opened"],
-                    result["resolved"],
-                    result.get("by_drift", {}),
-                )
+        breaker = _sweep_breaker("scheduler.goal_drift_sweep")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.goal_drift_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("goal-drift sweep raised; continuing")
-            await _record_heartbeat(
-                "scheduler.goal_drift_sweep", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_goal_drift_sweep_once()
+                if (
+                    result.get("opened", 0) > 0
+                    or result.get("resolved", 0) > 0
+                ):
+                    log.info(
+                        "goal drift sweep: %d opened, %d resolved (%s)",
+                        result["opened"],
+                        result["resolved"],
+                        result.get("by_drift", {}),
+                    )
+                await _record_heartbeat(
+                    "scheduler.goal_drift_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("goal-drift sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.goal_drift_sweep", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -582,18 +669,28 @@ async def _weekly_trend_sweep_loop(
         "weekly-trend sweep loop started (interval=%ss)", interval
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_weekly_trend_sweep_once()
+        breaker = _sweep_breaker("scheduler.weekly_trend_sweep")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.weekly_trend_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("weekly-trend sweep raised; continuing")
-            await _record_heartbeat(
-                "scheduler.weekly_trend_sweep", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_weekly_trend_sweep_once()
+                await _record_heartbeat(
+                    "scheduler.weekly_trend_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("weekly-trend sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.weekly_trend_sweep", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -609,27 +706,37 @@ async def _clinical_alert_repage_sweep_loop(
         interval,
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_clinical_alert_repage_sweep_once()
-            if result.get("repaged", 0) > 0:
-                log.warning(
-                    "clinical-alert re-page sweep enqueued %d page(s): %s",
-                    result["repaged"],
-                    result,
+        breaker = _sweep_breaker("scheduler.clinical_alert_repage_sweep")
+        if breaker.is_open():
+            await _record_heartbeat(
+                "scheduler.clinical_alert_repage_sweep",
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
+            )
+        else:
+            try:
+                result = await _run_clinical_alert_repage_sweep_once()
+                if result.get("repaged", 0) > 0:
+                    log.warning(
+                        "clinical-alert re-page sweep enqueued %d page(s): %s",
+                        result["repaged"],
+                        result,
+                    )
+                await _record_heartbeat(
+                    "scheduler.clinical_alert_repage_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
                 )
-            await _record_heartbeat(
-                "scheduler.clinical_alert_repage_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
-            )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception(
-                "clinical-alert re-page sweep raised; continuing"
-            )
-            await _record_heartbeat(
-                "scheduler.clinical_alert_repage_sweep",
-                outcome="error",
-            )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception(
+                    "clinical-alert re-page sweep raised; continuing"
+                )
+                await _record_heartbeat(
+                    "scheduler.clinical_alert_repage_sweep",
+                    outcome="error",
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -644,22 +751,32 @@ async def _delivery_alert_sweep_loop(
         "delivery alert sweep loop started (interval=%ss)", interval
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_delivery_alert_sweep_once()
-            if result.get("opened") or result.get("auto_resolved"):
-                log.warning(
-                    "delivery alert sweep state change: %s", result
-                )
+        breaker = _sweep_breaker("scheduler.delivery_alert_sweep")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.delivery_alert_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("delivery alert sweep raised; continuing")
-            await _record_heartbeat(
-                "scheduler.delivery_alert_sweep", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_delivery_alert_sweep_once()
+                if result.get("opened") or result.get("auto_resolved"):
+                    log.warning(
+                        "delivery alert sweep state change: %s", result
+                    )
+                await _record_heartbeat(
+                    "scheduler.delivery_alert_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("delivery alert sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.delivery_alert_sweep", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -675,26 +792,36 @@ async def _delivery_template_alert_sweep_loop(
         "(interval=%ss)", interval
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_delivery_template_alert_sweep_once()
-            if result.get("opened") or result.get("auto_resolved"):
-                log.warning(
-                    "delivery template alert sweep state change: %s",
-                    result,
+        breaker = _sweep_breaker("scheduler.delivery_template_alert_sweep")
+        if breaker.is_open():
+            await _record_heartbeat(
+                "scheduler.delivery_template_alert_sweep",
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
+            )
+        else:
+            try:
+                result = await _run_delivery_template_alert_sweep_once()
+                if result.get("opened") or result.get("auto_resolved"):
+                    log.warning(
+                        "delivery template alert sweep state change: %s",
+                        result,
+                    )
+                await _record_heartbeat(
+                    "scheduler.delivery_template_alert_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
                 )
-            await _record_heartbeat(
-                "scheduler.delivery_template_alert_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
-            )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception(
-                "delivery template alert sweep raised; continuing"
-            )
-            await _record_heartbeat(
-                "scheduler.delivery_template_alert_sweep",
-                outcome="error",
-            )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception(
+                    "delivery template alert sweep raised; continuing"
+                )
+                await _record_heartbeat(
+                    "scheduler.delivery_template_alert_sweep",
+                    outcome="error",
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -710,26 +837,36 @@ async def _adherence_pattern_sweep_loop(
         interval,
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_adherence_pattern_sweep_once()
-            if result.get("opened") or result.get("auto_resolved"):
-                log.warning(
-                    "adherence pattern sweep state change: %s",
-                    result,
+        breaker = _sweep_breaker("scheduler.adherence_pattern_sweep")
+        if breaker.is_open():
+            await _record_heartbeat(
+                "scheduler.adherence_pattern_sweep",
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
+            )
+        else:
+            try:
+                result = await _run_adherence_pattern_sweep_once()
+                if result.get("opened") or result.get("auto_resolved"):
+                    log.warning(
+                        "adherence pattern sweep state change: %s",
+                        result,
+                    )
+                await _record_heartbeat(
+                    "scheduler.adherence_pattern_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
                 )
-            await _record_heartbeat(
-                "scheduler.adherence_pattern_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
-            )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception(
-                "adherence pattern sweep raised; continuing"
-            )
-            await _record_heartbeat(
-                "scheduler.adherence_pattern_sweep",
-                outcome="error",
-            )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception(
+                    "adherence pattern sweep raised; continuing"
+                )
+                await _record_heartbeat(
+                    "scheduler.adherence_pattern_sweep",
+                    outcome="error",
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -745,31 +882,41 @@ async def _calendar_sync_sweep_loop(
         interval,
     )
     while not stop_event.is_set():
-        try:
-            result = await _run_calendar_sync_sweep_once()
-            totals = result.get("totals", {}) or {}
-            if (
-                totals.get("cancelled", 0)
-                or totals.get("rescheduled", 0)
-                or totals.get("errors", 0)
-            ):
-                log.warning(
-                    "calendar sync sweep state change: %s",
-                    result,
+        breaker = _sweep_breaker("scheduler.calendar_sync_sweep")
+        if breaker.is_open():
+            await _record_heartbeat(
+                "scheduler.calendar_sync_sweep",
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
+            )
+        else:
+            try:
+                result = await _run_calendar_sync_sweep_once()
+                totals = result.get("totals", {}) or {}
+                if (
+                    totals.get("cancelled", 0)
+                    or totals.get("rescheduled", 0)
+                    or totals.get("errors", 0)
+                ):
+                    log.warning(
+                        "calendar sync sweep state change: %s",
+                        result,
+                    )
+                await _record_heartbeat(
+                    "scheduler.calendar_sync_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
                 )
-            await _record_heartbeat(
-                "scheduler.calendar_sync_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
-            )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception(
-                "calendar sync sweep raised; continuing"
-            )
-            await _record_heartbeat(
-                "scheduler.calendar_sync_sweep",
-                outcome="error",
-            )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception(
+                    "calendar sync sweep raised; continuing"
+                )
+                await _record_heartbeat(
+                    "scheduler.calendar_sync_sweep",
+                    outcome="error",
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -782,24 +929,34 @@ async def _care_gap_sweep_loop(
 ) -> None:
     log.info("care-gap sweep loop started (interval=%ss)", interval)
     while not stop_event.is_set():
-        try:
-            result = await _run_care_gap_sweep_once()
-            total_materialized = sum(
-                (counts or {}).get("materialized", 0)
-                for counts in result.values()
-            )
-            if total_materialized > 0:
-                log.info("care-gap sweep: %s", result)
+        breaker = _sweep_breaker("scheduler.care_gap_sweep")
+        if breaker.is_open():
             await _record_heartbeat(
                 "scheduler.care_gap_sweep",
-                outcome="ok",
-                details=_heartbeat_details_safe(result),
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
             )
-        except Exception:  # noqa: BLE001 — keep loop alive
-            log.exception("care-gap sweep raised; continuing")
-            await _record_heartbeat(
-                "scheduler.care_gap_sweep", outcome="error"
-            )
+        else:
+            try:
+                result = await _run_care_gap_sweep_once()
+                total_materialized = sum(
+                    (counts or {}).get("materialized", 0)
+                    for counts in result.values()
+                )
+                if total_materialized > 0:
+                    log.info("care-gap sweep: %s", result)
+                await _record_heartbeat(
+                    "scheduler.care_gap_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("care-gap sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.care_gap_sweep", outcome="error"
+                )
+                breaker.record_failure()
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
