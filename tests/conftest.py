@@ -56,8 +56,13 @@ os.environ.setdefault("ALLOW_UNAUTHENTICATED", "1")
 # middleware would enforce auth and 401 every TestClient call that doesn't
 # send it — i.e. nearly every integration test. test_api_auth monkeypatches
 # the module-level key when it specifically needs the enabled path.
-os.environ.pop("ORCHESTRATOR_API_KEY", None)
-os.environ.pop("GATEWAY_API_KEY", None)
+#
+# IMPORTANT: set to "" (not pop), because ``app/db/session.py`` calls
+# ``load_dotenv()`` at module import time, which would re-populate a popped
+# key from .env. ``load_dotenv`` default semantics never override an existing
+# value, so an explicit empty string sticks.
+os.environ["ORCHESTRATOR_API_KEY"] = ""
+os.environ["GATEWAY_API_KEY"] = ""
 
 # Reset any cached LLM singleton that may already be enabled if a prior
 # in-process import loaded the module before this conftest ran.

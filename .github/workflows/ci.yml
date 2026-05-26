@@ -1,0 +1,105 @@
+# CI gate — runs on every PR and every push to main.
+#
+# What this enforces:
+#   - Python: ruff lint + pyproject metadata + unit tests (no DB required).
+#   - Ops console: typecheck via `next build` + ESLint.
+#
+# What this does NOT enforce (yet):
+#   - The integration suite (~538 tests, ~9min) needs DATABASE_URL pointing at
+#     a real Postgres. Those tests `pytest.skip` themselves when DATABASE_URL is
+#     unset (see tests/integration/*.py `pytestmark = pytest.mark.skipif(...)`),
+#     so they're silently skipped here. Run them locally or in a nightly
+#     workflow against a dedicated CI Supabase.
+#   - The Coolify auto-deploy on push to main is independent of this workflow
+#     today. To make CI an actual deploy gate, enable GitHub branch protection
+#     on `main` requiring the `ci / python-unit` + `ci / ops-console` checks to
+#     pass before merge, and route Coolify deploys off PR merges instead of
+#     raw pushes.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs for the same branch when a new push arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so gitleaks can scan past commits, not just the diff.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          # Required by gitleaks-action; no paid features used.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config: .gitleaks.toml
+
+  python-unit:
+    name: python-unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package + dev extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Unit tests (DATABASE_URL unset → integration tests auto-skip)
+        env:
+          # Belt-and-suspenders: conftest already pops these, but make CI
+          # behaviour deterministic if a future change relies on env state.
+          ALLOW_UNAUTHENTICATED: "1"
+          WHATSAPP_DRY_RUN: "1"
+          LLM_ENABLED: "0"
+          LANGGRAPH_ENABLED: "0"
+        run: pytest -n auto --dist loadgroup -q
+
+  ops-console:
+    name: ops-console
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ops_console
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build (TypeScript compile + Next.js production build)
+        env:
+          # Build-time env is not used (no NEXT_PUBLIC_ vars; secrets read at
+          # request time) — declare empty values so the build doesn't hit a
+          # warning about unset envs that might be referenced indirectly.
+          ORCHESTRATOR_URL: "http://localhost:8002"
+          GATEWAY_URL: "http://localhost:8001"
+        run: npm run build

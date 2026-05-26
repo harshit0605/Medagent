@@ -1,0 +1,33 @@
+# gitleaks config — extends the default rule set with project-specific
+# allowlists for known false positives.
+#
+# Run locally:  gitleaks detect --config .gitleaks.toml --redact
+# Run via pre-commit:  pre-commit run gitleaks --all-files
+
+[extend]
+# Inherit gitleaks' default rule set (AWS keys, GitHub tokens, generic
+# high-entropy strings, private keys, etc.) — we only add allowlists.
+useDefault = true
+
+[allowlist]
+description = "Medagent allowlist — docs samples, test fixtures, placeholder values"
+
+# Paths that contain example/placeholder secrets by design.
+paths = [
+  '''(?i)\.env\.example''',
+  '''(?i)docs/.*\.md''',
+  '''(?i)readme\.md''',
+  # Sanctum / Coolify integration notes referenced in chat-archived sessions.
+  '''(?i)\.claude/.*''',
+  # Fixture tokens used by tests.
+  '''(?i)tests/.*\.py''',
+]
+
+# Match literal placeholder strings we use throughout docs.
+regexes = [
+  '''(?i)your-secret-here''',
+  '''(?i)placeholder''',
+  '''(?i)example\.com''',
+  '''(?i)test-?token''',
+  '''(?i)changeme''',
+]
