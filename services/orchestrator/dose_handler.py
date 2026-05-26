@@ -25,6 +25,7 @@ from typing import Any
 
 from app.db.models import AdherenceStatus
 from app.db.repositories import adherence_events as adherence_events_repo
+from app.db.repositories import caregivers as caregivers_repo
 from app.db.repositories import patients as patients_repo
 from app.db.repositories import regimens as regimens_repo
 from app.db.repositories import scheduled_events as scheduled_events_repo
@@ -76,18 +77,31 @@ async def handle_dose_action(
 
         # Cross-patient ownership check — refuse to mutate a different
         # patient's row even if a malicious / confused tap somehow arrives.
+        #
+        # Caregiver fallback: when the sender's phone doesn't match the
+        # patient row, look up an active confirmed caregiver on this patient
+        # with that phone. The caregiver fan-out (CAREGIVER_DOSE_FANOUT_ENABLED)
+        # delivers the same button payload to caregivers, so this path lets
+        # them act on behalf of the patient without raising a cross-patient
+        # refusal. The caregiver id + phone are stamped into the adherence
+        # event's metadata for the audit trail.
+        acting_caregiver = None
         patient = await patients_repo.get_by_phone(db, patient_phone)
         if patient is None or adherence.patient_id != patient.id:
-            log.warning(
-                "dose action refused: phone=%s adherence.patient_id=%s",
-                patient_phone,
-                adherence.patient_id,
+            acting_caregiver = await caregivers_repo.find_active_confirmed_by_phone(
+                db, phone=patient_phone, patient_id=adherence.patient_id
             )
-            return _reply(
-                "I can only update doses for your own account. Please contact "
-                "support if this looks wrong.",
-                audit_codes=["dose_action_cross_patient_refused"],
-            )
+            if acting_caregiver is None:
+                log.warning(
+                    "dose action refused: phone=%s adherence.patient_id=%s",
+                    patient_phone,
+                    adherence.patient_id,
+                )
+                return _reply(
+                    "I can only update doses for your own account. Please "
+                    "contact support if this looks wrong.",
+                    audit_codes=["dose_action_cross_patient_refused"],
+                )
 
         regimen = (
             await regimens_repo.get(db, adherence.regimen_id)
@@ -101,6 +115,22 @@ async def handle_dose_action(
         )
         now = datetime.now(timezone.utc)
 
+        # Caregiver-attribution metadata stamped onto the adherence row on
+        # every mutation below. None when the patient themselves acted.
+        cg_meta: dict[str, Any] | None = None
+        if acting_caregiver is not None:
+            cg_meta = {
+                "acted_by_caregiver_id": acting_caregiver.id,
+                "acted_by_caregiver_name": acting_caregiver.full_name,
+                "acted_by_phone": patient_phone,
+            }
+            log.info(
+                "dose action by caregiver %s for patient %s (adherence=%s)",
+                acting_caregiver.id,
+                adherence.patient_id,
+                adherence_event_id,
+            )
+
         # ``late_taken`` ALWAYS overrides — the patient did take the dose,
         # they're just confirming after the grace window. Records
         # ``late_confirmed=true`` in metadata so adherence reports can
@@ -111,15 +141,18 @@ async def handle_dose_action(
                     f"Already logged: {med_label} taken. ✓",
                     audit_codes=["dose_action_late_taken_already_taken"],
                 )
+            late_meta = {
+                "late_confirmed": True,
+                "previous_status": adherence.status.value,
+            }
+            if cg_meta is not None:
+                late_meta.update(cg_meta)
             await adherence_events_repo.update_status(
                 db,
                 adherence_event_id,
                 status=AdherenceStatus.taken,
                 confirmed_at=now,
-                metadata={
-                    "late_confirmed": True,
-                    "previous_status": adherence.status.value,
-                },
+                metadata=late_meta,
             )
             await db.commit()
             return _reply(
@@ -159,6 +192,13 @@ async def handle_dose_action(
 
         if action == "taken":
             await adherence_events_repo.mark_taken(db, adherence_event_id, at=now)
+            if cg_meta is not None:
+                await adherence_events_repo.update_status(
+                    db,
+                    adherence_event_id,
+                    status=AdherenceStatus.taken,
+                    metadata=cg_meta,
+                )
             await db.commit()
             return _reply(
                 f"Logged: {med_label} taken. ✓",
@@ -167,8 +207,20 @@ async def handle_dose_action(
 
         if action == "skipped":
             await adherence_events_repo.mark_skipped(
-                db, adherence_event_id, at=now, reason="patient_skipped"
+                db,
+                adherence_event_id,
+                at=now,
+                reason=(
+                    "caregiver_skipped" if acting_caregiver else "patient_skipped"
+                ),
             )
+            if cg_meta is not None:
+                await adherence_events_repo.update_status(
+                    db,
+                    adherence_event_id,
+                    status=AdherenceStatus.skipped,
+                    metadata=cg_meta,
+                )
             await db.commit()
             return _reply(
                 f"Logged: {med_label} skipped. We'll prompt you at the next "

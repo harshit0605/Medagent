@@ -54,7 +54,7 @@ def _patient(*, id=2, phone="9100"):
     return types.SimpleNamespace(id=id, phone=phone)
 
 
-def _stub_repos(monkeypatch, *, adherence, patient, regimen=None):
+def _stub_repos(monkeypatch, *, adherence, patient, regimen=None, caregiver=None):
     captured = {"updates": []}
 
     async def get_adh(_db, _id):
@@ -78,9 +78,16 @@ def _stub_repos(monkeypatch, *, adherence, patient, regimen=None):
         captured["updates"].append(("delayed", _id, kwargs))
         return adherence
 
+    async def update_status(_db, _id, **kwargs):
+        captured["updates"].append(("status_update", _id, kwargs))
+        return adherence
+
     async def enqueue(_db, **kwargs):
         captured["enqueued"] = kwargs
         return types.SimpleNamespace(id=999)
+
+    async def find_cg(_db, *, phone, patient_id=None):
+        return caregiver
 
     monkeypatch.setattr(dose_handler.adherence_events_repo, "get", get_adh)
     monkeypatch.setattr(dose_handler.patients_repo, "get_by_phone", get_patient)
@@ -94,7 +101,13 @@ def _stub_repos(monkeypatch, *, adherence, patient, regimen=None):
     monkeypatch.setattr(
         dose_handler.adherence_events_repo, "mark_delayed", mark_delayed
     )
+    monkeypatch.setattr(
+        dose_handler.adherence_events_repo, "update_status", update_status
+    )
     monkeypatch.setattr(dose_handler.scheduled_events_repo, "enqueue", enqueue)
+    monkeypatch.setattr(
+        dose_handler.caregivers_repo, "find_active_confirmed_by_phone", find_cg
+    )
     return captured
 
 
@@ -189,6 +202,62 @@ async def test_handle_refuses_cross_patient(monkeypatch):
         new_user_text="[dose-action] taken adherence_event_id=42",
     )
     assert delta is not None
+    assert "your own account" in delta["response_body"]
+    assert "dose_action_cross_patient_refused" in delta["audit_reasons"]
+    assert captured["updates"] == []
+
+
+async def test_handle_caregiver_can_act_on_behalf(monkeypatch):
+    """Inbound from a phone that isn't the patient's, but IS a confirmed
+    active caregiver for the patient → action allowed, attributed to caregiver."""
+    cg = types.SimpleNamespace(
+        id=11,
+        phone="cg-9988",
+        full_name="Pratik Mehra",
+        patient_id=99,
+    )
+    captured = _stub_repos(
+        monkeypatch,
+        adherence=_adherence(patient_id=99),  # belongs to patient 99
+        patient=None,  # cg-9988 isn't a patient
+        regimen=_regimen(),
+        caregiver=cg,  # but is a registered caregiver for patient 99
+    )
+    _patch_session(monkeypatch)
+
+    delta = await dose_handler.handle_dose_action(
+        patient_phone="cg-9988",
+        new_user_text="[dose-action] taken adherence_event_id=42",
+    )
+    assert delta is not None
+    assert "Logged" in delta["response_body"]
+    assert "dose_action_taken" in delta["audit_reasons"]
+    # mark_taken + a follow-up status_update with caregiver metadata.
+    update_kinds = [u[0] for u in captured["updates"]]
+    assert "taken" in update_kinds
+    cg_stamp = next(
+        u for u in captured["updates"] if u[0] == "status_update"
+    )
+    assert cg_stamp[2]["metadata"]["acted_by_caregiver_id"] == 11
+    assert cg_stamp[2]["metadata"]["acted_by_phone"] == "cg-9988"
+
+
+async def test_handle_unknown_phone_still_refused_when_no_caregiver(monkeypatch):
+    """If the phone isn't a patient AND isn't a confirmed caregiver, the
+    cross-patient refusal stands."""
+    captured = _stub_repos(
+        monkeypatch,
+        adherence=_adherence(patient_id=99),
+        patient=None,
+        regimen=_regimen(),
+        caregiver=None,  # not a registered caregiver either
+    )
+    _patch_session(monkeypatch)
+
+    delta = await dose_handler.handle_dose_action(
+        patient_phone="random-stranger",
+        new_user_text="[dose-action] taken adherence_event_id=42",
+    )
     assert "your own account" in delta["response_body"]
     assert "dose_action_cross_patient_refused" in delta["audit_reasons"]
     assert captured["updates"] == []

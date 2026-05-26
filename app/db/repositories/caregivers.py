@@ -60,6 +60,51 @@ async def list_active_recap_recipients(
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def list_active_dose_recipients(
+    session: AsyncSession, patient_id: int
+) -> list[Caregiver]:
+    """Active + confirmed-consent + ``notify_on_dose_reminder`` caregivers.
+
+    The dose-reminder dispatcher fan-out walks this list when the global
+    ``CAREGIVER_DOSE_FANOUT_ENABLED`` flag is on. Mirror of
+    :func:`list_active_recap_recipients`."""
+    stmt = (
+        select(Caregiver)
+        .where(Caregiver.patient_id == patient_id)
+        .where(Caregiver.active.is_(True))
+        .where(Caregiver.consent_status == CONSENT_CONFIRMED)
+        .where(Caregiver.notify_on_dose_reminder.is_(True))
+        .order_by(asc(Caregiver.full_name))
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def find_active_confirmed_by_phone(
+    session: AsyncSession,
+    *,
+    phone: str,
+    patient_id: int | None = None,
+) -> Caregiver | None:
+    """Look up an active + confirmed-consent caregiver row by phone, optionally
+    scoped to a single patient.
+
+    Used by the inbound dose-action handler: when a button-tap arrives from
+    a phone that doesn't match any ``patients.phone``, we consult this to
+    see if the sender is a known caregiver acting on behalf of a patient.
+    The patient-id scope makes the call O(1) when we know who the action
+    targets (the adherence event already names the patient)."""
+    stmt = (
+        select(Caregiver)
+        .where(Caregiver.phone == phone)
+        .where(Caregiver.active.is_(True))
+        .where(Caregiver.consent_status == CONSENT_CONFIRMED)
+    )
+    if patient_id is not None:
+        stmt = stmt.where(Caregiver.patient_id == patient_id)
+    stmt = stmt.order_by(desc(Caregiver.created_at)).limit(1)
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 async def get(
     session: AsyncSession, caregiver_id: int
 ) -> Caregiver | None:

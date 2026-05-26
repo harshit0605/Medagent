@@ -124,6 +124,17 @@ _REMINDER_TEMPLATE_NAME = os.getenv(
 _DOSE_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_DOSE_TEMPLATE_NAME", "dose_reminder_v1"
 )
+# Caregiver-fan-out config. Globally OFF by default — the Meta-approved
+# caregiver template (``caregiver_dose_reminder_v1``: params name + med) must
+# be live before ops flips ``CAREGIVER_DOSE_FANOUT_ENABLED=1`` in prod.
+# Per-caregiver opt-in (Caregiver.notify_on_dose_reminder) also gates each
+# recipient, so this flag is the kill switch and the column is the routing.
+_CAREGIVER_DOSE_FANOUT_ENABLED = (
+    os.getenv("CAREGIVER_DOSE_FANOUT_ENABLED", "0") == "1"
+)
+_CAREGIVER_DOSE_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_CAREGIVER_DOSE_TEMPLATE_NAME", "caregiver_dose_reminder_v1"
+)
 # Approved Meta template name for outside-CSW REFILL reminders. Defaults
 # to the legacy `refill_due_v1` (single text param: medication + dose).
 _REFILL_TEMPLATE_NAME = os.getenv(
@@ -344,6 +355,67 @@ async def _build_dose_reminder(
     if _DOSE_TEMPLATE_NAME.endswith("_v2"):
         out["buttons"] = [b for b in buttons if b["action"] != "dose_snoozed"]
     return out
+
+
+async def _dose_caregiver_fanout_messages(
+    db: AsyncSession, event: ScheduledEvent
+) -> list[dict[str, Any]]:
+    """Build the parallel dose-reminder messages for consented caregivers.
+
+    Returns an empty list when the global ``CAREGIVER_DOSE_FANOUT_ENABLED``
+    flag is off (the common case in prod until the Meta caregiver template
+    is approved), when the adherence event has no attached patient, or when
+    no caregivers have opted in (``Caregiver.notify_on_dose_reminder``).
+
+    Each fan-out message is template-only (caregivers haven't messaged us
+    so we're always out-of-CSW from their phone's perspective). The
+    template carries 2 params: patient first name + medication label. We
+    don't inject button payloads — caregiver taps on the dose template
+    would still encode ``dose_taken:{adherence_event_id}`` and the dose
+    handler resolves caregiver attribution via
+    :func:`caregivers_repo.find_active_confirmed_by_phone`.
+    """
+    if not _CAREGIVER_DOSE_FANOUT_ENABLED:
+        return []
+
+    from app.db.repositories import adherence_events as adherence_events_repo
+    from app.db.repositories import caregivers as caregivers_repo
+
+    payload = dict(event.payload or {})
+    adherence_event_id = payload.get("adherence_event_id")
+    medication_name = payload.get("medication_name") or "your medication"
+    dose = payload.get("dose") or ""
+    if not adherence_event_id:
+        return []
+    adherence = await adherence_events_repo.get(db, int(adherence_event_id))
+    if adherence is None or adherence.patient_id is None:
+        return []
+    caregivers = await caregivers_repo.list_active_dose_recipients(
+        db, adherence.patient_id
+    )
+    if not caregivers:
+        return []
+    patient_name = await _patient_first_name(
+        db, patient_db_id=adherence.patient_id, patient_phone=event.patient_id
+    )
+    med_label = f"{medication_name} ({dose})" if dose else medication_name
+    body = (
+        f"Reminder for {patient_name}: time for {med_label}. "
+        "You're receiving this as their caregiver."
+    )
+    return [
+        {
+            "patient_id": cg.phone,
+            "body": body,
+            "use_template": True,
+            "template_name": _CAREGIVER_DOSE_TEMPLATE_NAME,
+            "template_params": {
+                "1_name": patient_name,
+                "2_med": med_label,
+            },
+        }
+        for cg in caregivers
+    ]
 
 
 async def _build_refill_reminder(
@@ -1613,4 +1685,35 @@ async def dispatch(
         # Network / timeout — transient, retry.
         log.warning("dispatch failed for event %s: %s", event.id, exc)
         return f"http_error:{type(exc).__name__}:{exc}"
+
+    # --- caregiver fan-out (best-effort, post-primary) ---------------------
+    # Only the dose path participates today. Caregiver sends are deliberately
+    # NOT in the primary failure path — a caregiver send failure must not
+    # cause the patient's dose reminder to retry / DLQ, and a primary failure
+    # short-circuits before we get here. Each fan-out is independent: a
+    # caregiver-side 4xx (e.g. cold number rejected) doesn't impact peer
+    # caregivers or the primary.
+    if event.event_type in _DOSE_EVENT_TYPES and db is not None:
+        try:
+            fanout = await _dose_caregiver_fanout_messages(db, event)
+        except Exception:  # noqa: BLE001 — never block primary success
+            log.exception(
+                "caregiver fan-out lookup failed for event %s", event.id
+            )
+            fanout = []
+        if fanout:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                for msg in fanout:
+                    try:
+                        cg_resp = await client.post(
+                            url, json=msg, headers=gateway_auth_headers()
+                        )
+                        cg_resp.raise_for_status()
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning(
+                            "caregiver fan-out send failed (event=%s phone=%s): %s",
+                            event.id,
+                            msg.get("patient_id"),
+                            exc,
+                        )
     return None

@@ -246,6 +246,15 @@ class Caregiver(TimestampMixin, Base):
     notify_on_recap: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
+    # Opt-in per-caregiver dose-reminder fan-out (migration 0049). DEFAULT
+    # FALSE — existing caregivers don't auto-start receiving dose copies; an
+    # operator (or the caregiver themselves) has to flip this explicitly. The
+    # dispatcher additionally gates fan-out behind the global
+    # CAREGIVER_DOSE_FANOUT_ENABLED env flag so a Meta-template-approval slip
+    # can't accidentally fire unbilled sends.
+    notify_on_dose_reminder: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     patient: Mapped[Patient] = relationship(back_populates="caregivers")
