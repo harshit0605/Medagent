@@ -422,6 +422,43 @@ async def run_agent_workflow(
                     ),
                 )
 
+    # Pregnancy NL short-circuit (E5/E6): conversational intake ("pregnant,
+    # LMP 15 Jan" → open a pregnancy) + data-aware status reply ("how many
+    # weeks am I?" → current GA week + next milestone). Safety-deferred: a
+    # message that also reads as a symptom goes to triage instead.
+    if inbound_text:
+        from services.orchestrator.pregnancy_nl_handler import (
+            handle_pregnancy_nl,
+            looks_like_pregnancy_nl,
+        )
+        from services.orchestrator.side_effect_handler import (
+            looks_like_side_effect_report,
+        )
+
+        if looks_like_pregnancy_nl(inbound_text) and not looks_like_side_effect_report(
+            inbound_text
+        ):
+            delta = await handle_pregnancy_nl(
+                patient_phone=patient_id, new_user_text=inbound_text
+            )
+            if delta is not None:
+                return WorkflowResult(
+                    intent="pregnancy_checklist",
+                    risk_level="low",
+                    use_template=False,
+                    policy_reason="pregnancy_nl",
+                    policy_reason_codes=("pregnancy_nl",),
+                    flow_action="ALLOW",
+                    escalation_required=False,
+                    escalation_reason=None,
+                    response_body=delta["response_body"],
+                    template_name=None,
+                    quick_replies=["CALL", "HELP"],
+                    audit_reasons=delta.get(
+                        "audit_reasons", ["pregnancy_nl"]
+                    ),
+                )
+
     # Order substitution approve/decline tap — sync-fallback parity with the
     # graph router's order_handler.
     if inbound_text:
