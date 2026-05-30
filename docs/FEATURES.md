@@ -4,8 +4,10 @@ _Comprehensive catalog of what's built and live in the medagent platform.
 Companion to [`source_of_truth.md`](source_of_truth.md) (product vision) and
 [`ROADMAP.md`](ROADMAP.md) (gap tracker / progress log)._
 
-_Last verified: 2026-05-27 — full unit + integration suites green; all 4
-services live in production with HMAC-signed operator identity enforced._
+_Last verified: 2026-05-31 — full unit + integration suites green; all 4
+services live in production with HMAC-signed operator identity enforced. V5
+sprint complete (insulin sliding-scale, pharmacist role, NL pregnancy intake,
+patient search, delivery reconciliation, dual-control erasure + more)._
 
 ---
 
@@ -15,7 +17,7 @@ services live in production with HMAC-signed operator identity enforced._
 |---|---|
 | **Services** | `orchestrator` (FastAPI/LangGraph), `whatsapp_gateway` (FastAPI), `scheduler` (FastAPI background sweeps), `ops_console` (Next.js 16 / React 19) |
 | **Inbound channels** | WhatsApp Cloud API (text + voice), Google Calendar push, Meta delivery-status callbacks |
-| **Storage** | Postgres (Supabase) via SQLAlchemy 2 async; Alembic migrations at head `0050` |
+| **Storage** | Postgres (Supabase) via SQLAlchemy 2 async; Alembic migrations at head `0055` |
 | **LLM** | OpenAI (env-gated; deterministic rule-based fallback; per-call cost tracking; circuit-breaker on degraded upstream) |
 | **Background workers** | ~21 sweep modules (dose / refill / lab / recap / care-gap / delivery / SLA / pregnancy / postpartum / asthma / on-call re-page / weekly-trend / etc.) — each guarded by a per-sweep circuit breaker |
 | **API surface** | ~30 domain routers (`services/orchestrator/routers/`) + a thin `/route` dispatcher |
@@ -246,11 +248,40 @@ services live in production with HMAC-signed operator identity enforced._
 
 ---
 
+## 5a. V5 capabilities (May 2026)
+
+**Patient-facing**
+- **Insulin sliding-scale** (SoT §3A): a regimen's `dosing_rule` maps a glucose reading → recommended units; a diabetes patient logging glucose gets the care-team-defined dose echoed back (advisory, never auto-administered; hypo → no-dose + escalate, severe-hyper → escalate)
+- **Conversational pregnancy intake** ("pregnant, LMP 15 Jan" → opens the timeline) + **data-aware status** ("how many weeks am I?" → current GA + next milestone)
+- **Asthma puff-based refill estimation** (SoT §3C): rescue-inhaler puffs vs canister size → low-refill nudge; "refilled my inhaler" resets
+- **Self-service reminder-time change** ("change my reminder to 9am")
+- **Educational microcontent** ("what is HbA1c?", "how do I use a spacer?") — curated, non-diagnostic
+- **HTN caregiver streak alert** (SoT §3B): cardiac-cohort missed-dose streak → caregiver notice
+- **Multi-language templates**: template language selected from the patient's `preferred_language`
+
+**Operator / clinic-ops**
+- **Pharmacist registry** + refill-ticket routing (MVP #5 pharmacist handoff)
+- **Full-text patient search** (`/patients/search` — name / phone / medication)
+- **Per-handler LLM reply-quality monitor** (`/ops/analytics/handler-quality`)
+- **Telehealth video link** on appointments (reminder includes a Join line)
+- **Dual-control erasure** (opt-in two-person rule) + **DSAR export rate limit** + abuse alert
+
+**Reliability / security**
+- **Per-patient delivery reconciliation sweep** — escalates silent patients (deactivated / blocked numbers)
+- **Liveness/readiness `/health` split** (`/health/ready` checks DB + Fernet + LLM config)
+- **Fernet key rotation** (`MultiFernet`) + **secrets-rotation runbook** (`SECRETS_ROTATION.md`)
+- **Per-patient LLM token budget** + the existing circuit breakers
+- **mypy** type-checking in CI on the security/reliability core modules
+
+---
+
 ## 6. Currently deferred (per SoT §11)
 
 - In-chat payments
 - ABDM / ABHA integration
 - Autonomous clinical diagnosis / treatment
+
+_Scoped product follow-ups (front-end / external-integration / large-refactor) are tracked in [`OPS_FOLLOWUPS.md`](OPS_FOLLOWUPS.md)._
 
 ---
 

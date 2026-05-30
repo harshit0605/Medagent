@@ -38,43 +38,45 @@ The operational backbone is complete and on `main`:
 
 ---
 
-## Remaining backlog (V5 — goal-mode work list)
+## V5 sprint — DONE (2026-05-27/31)
 
-_Compiled 2026-05-27 from the 6-agent audit, SoT §3 cohort gaps, and #13
-deferred items. Excludes SoT §11 non-goals (payments / ABDM / autonomous
-diagnosis). Worked in priority order; each lands as its own commit._
+Worked the full V5 backlog (6-agent audit + SoT §3 gaps + #13) in priority
+order; each landed as its own tested commit. **Completed:**
 
-**Security**: A2 broader PII-log scan · A4 two-person erasure rule ·
-A5 DSAR export rate-limit + alert · A1 Fernet `MultiFernet` rotation ·
-A6 secrets-rotation runbook · A7 pharmacy-adapter URL allowlist.
+- **Security**: ✅ A1 Fernet `MultiFernet` rotation · ✅ A2 broader PII-log
+  redaction · ✅ A4 two-person erasure (dual control, 0052) · ✅ A5 DSAR
+  export rate-limit + alert · ✅ A6 secrets-rotation runbook · ✅ A7 pharmacy
+  URL allowlist.
+- **Reliability/Perf**: ✅ B1 per-patient delivery reconciliation sweep
+  (0051) · ✅ B2 liveness/readiness `/health` split · ✅ B3 bulk-insert
+  materializers · ✅ C1 (reduced to the one real index) · ✅ C2 LLM
+  per-patient/day token budget · ✅ C3 query-plan audit (verdict: no missing
+  indexes; repeatable `scripts/query_plan_audit.py`).
+- **Dev infra**: ✅ D1 mypy + CI · ✅ D2 broader ops-console vitest ·
+  ✅ H1 Rx OCR e2e test.
+- **SoT cohort packs (Strand C — the full original cohort vision)**:
+  ✅ E1 insulin sliding-scale (0053) · ✅ E2 pharmacist role (0054) ·
+  ✅ E3 HTN caregiver streak alert · ✅ E4 asthma puff-based refill
+  estimation · ✅ E5 NL pregnancy intake · ✅ E6 data-aware
+  `pregnancy_checklist`.
+- **Patient conversational (G)**: ✅ G1 self-service reminder-time change ·
+  ✅ G5 educational microcontent.
+- **Doctor/operator UX (F)**: ✅ F3 full-text patient search ·
+  ✅ F6 per-handler LLM quality monitor.
+- **Net-new (I)**: ✅ I3 multi-language template selection ·
+  ✅ I6 telehealth video link (0055).
+- **Docs**: FEATURES + ROADMAP refresh · SECRETS_ROTATION.md ·
+  OPS_FOLLOWUPS.md.
 
-**Reliability/Perf**: B1 per-patient delivery reconciliation sweep ·
-B2 liveness/readiness `/health` split · B3 bulk-insert materializers ·
-C1 three secondary hot indexes · C2 LLM per-patient/day token budget ·
-C3 pg_stat_statements query-plan audit.
+Migrations 0050 → 0055 applied to remote DB. ~25 V5 commits.
 
-**Dev infra**: D1 mypy/pyright + CI · D2 broader ops-console tests ·
-H1 Rx OCR e2e integration test.
-
-**SoT cohort packs (Strand C)**: E1 insulin / sliding-scale dose model ·
-E2 pharmacist role · E3 HTN caregiver streak alert · E4 asthma puff-based
-refill estimation · E5 conversational NL pregnancy/regimen intake ·
-E6 data-aware `pregnancy_checklist` reply.
-
-**Patient conversational depth (G)**: self-service reminder reschedule ·
-symptom check-in flows · patient-initiated appointment request ·
-vaccination reminders · educational microcontent · monthly spend snapshot.
-
-**Doctor/operator UX (F)**: mobile/PWA shell · inbox voice/photo render ·
-full-text patient search · bulk patient actions · inbox SLA timer + snooze ·
-per-template LLM quality monitor.
-
-**Net-new adjacencies (I)**: multi-tenant `clinic_id` · SMS fallback for
-critical escalation · multi-language template pack · adherence-summary PDF ·
-lab partner ingestion · telehealth video-link send-out.
-
-**Ops (non-code)**: J1 submit `caregiver_dose_reminder_v1` Meta template,
-then flip `CAREGIVER_DOSE_FANOUT_ENABLED=1` · J2 Coolify CI-status deploy gate.
+**Remaining (scoped, see `docs/OPS_FOLLOWUPS.md`)** — each needs an external
+integration, a front-end build, or a large refactor, so scoped not half-built:
+G2 symptom check-in · G3 patient-initiated booking · G4 vaccination reminders ·
+G6 spend snapshot (no cost data) · F1 mobile/PWA · F2 inbox media render ·
+F4 bulk patient actions · F5 inbox SLA timer · I1 multi-tenant · I2 SMS
+fallback (needs provider) · I4 adherence PDF · I5 lab partner ingestion ·
+J1 caregiver Meta-template submission · J2 Coolify CI-gate decision.
 
 ---
 

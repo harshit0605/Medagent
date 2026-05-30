@@ -687,9 +687,7 @@ async def _patient_language(db: AsyncSession, patient_phone: str) -> str | None:
         patient = await patients_repo.get_by_phone(db, patient_phone)
     except Exception:  # noqa: BLE001 — language lookup must never block a send
         return None
-    if patient is not None and patient.preferred_language:
-        return patient.preferred_language
-    return None
+    return getattr(patient, "preferred_language", None) or None
 
 
 async def _assert_pregnancy_active(db: AsyncSession, pregnancy_id: Any):
