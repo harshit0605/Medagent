@@ -679,6 +679,19 @@ async def _patient_first_name(
     return "there"
 
 
+async def _patient_language(db: AsyncSession, patient_phone: str) -> str | None:
+    """The patient's preferred_language code (for template-language selection,
+    I3). None when no patient row / no preference (gateway falls back to the
+    default language). Caregiver recipients (their phone isn't a patient) → None."""
+    try:
+        patient = await patients_repo.get_by_phone(db, patient_phone)
+    except Exception:  # noqa: BLE001 — language lookup must never block a send
+        return None
+    if patient is not None and patient.preferred_language:
+        return patient.preferred_language
+    return None
+
+
 async def _assert_pregnancy_active(db: AsyncSession, pregnancy_id: Any):
     """Fetch the pregnancy and confirm it's still active, else
     ReminderNotApplicable (a delivered/ended pregnancy shouldn't nudge)."""
@@ -1703,6 +1716,20 @@ async def dispatch(
     except ValueError as exc:
         log.warning("dispatch skipped: %s", exc)
         return f"unmapped:{event.event_type}"
+
+    # Multi-language (I3): set the template LANGUAGE from the patient's
+    # preferred_language so Meta serves the matching language version. One
+    # place covers every template builder. Only applies to template sends and
+    # only when the language isn't already set by the builder.
+    if (
+        isinstance(message, dict)
+        and message.get("use_template")
+        and not message.get("language")
+        and db is not None
+    ):
+        lang = await _patient_language(db, event.patient_id)
+        if lang:
+            message["language"] = lang
 
     url = base.rstrip("/") + "/send"
     try:

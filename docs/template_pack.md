@@ -45,3 +45,12 @@
 - `caregiver_daily_digest_v1` should summarize misses in last 24h and open high-risk alerts.
 
 Use utility category for reminders and follow-ups; enforce template sends outside 24h customer service window.
+
+## Multi-language (V5 — I3)
+The dispatcher sets each template send's `language` code from the patient's
+`preferred_language`; Meta serves the matching language version of the named
+template. To enable a language for a template, submit + get approval for that
+language version of the SAME template name at Meta (e.g. `dose_reminder_v1` in
+`hi`, `ta`, `te`, `kn`, `mr`). Until a language version is approved, Meta falls
+back per its own rules; set `WHATSAPP_TEMPLATE_LANGUAGE` for the default.
+Submit-once-per-language is an ops action — the code path is ready.

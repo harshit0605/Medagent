@@ -125,6 +125,12 @@ class MessageOut(BaseModel):
 
     template_name: str | None = None
     template_params: dict[str, str | int | float | bool] = Field(default_factory=dict)
+    # WhatsApp template LANGUAGE code (e.g. "en", "hi", "ta"). Meta resolves the
+    # matching language version of the named template. When omitted the gateway
+    # falls back to WHATSAPP_TEMPLATE_LANGUAGE (default "en"). Set from the
+    # patient's preferred_language so a Hindi-speaking patient gets the Hindi
+    # template version (must be submitted+approved at Meta for that language).
+    language: str | None = None
     quick_replies: list[QuickReply] = Field(default_factory=list)
     buttons: list[ActionButton] = Field(default_factory=list)
 

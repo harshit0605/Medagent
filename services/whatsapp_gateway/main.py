@@ -198,6 +198,7 @@ async def send_message(
             template_name=message.template_name,
             template_params=message.template_params or None,
             button_payloads=button_payloads,
+            language=message.language,
         )
     else:
         body = message.body or message.content or ""
