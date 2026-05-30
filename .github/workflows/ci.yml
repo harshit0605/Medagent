@@ -65,6 +65,9 @@ jobs:
       - name: Ruff lint
         run: ruff check .
 
+      - name: Type check (mypy — curated core modules)
+        run: mypy
+
       - name: Unit tests (DATABASE_URL unset → integration tests auto-skip)
         env:
           # Belt-and-suspenders: conftest already pops these, but make CI

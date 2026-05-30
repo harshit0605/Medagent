@@ -110,8 +110,10 @@ def resolve_actor(
             raise ValueError("401:missing X-Ops-Actor header")
         return (fallback or "ops"), False
 
-    is_signed = bool(key) and bool(header_signature) and verify(
-        header_actor, header_signature, key=key
+    is_signed = (
+        bool(key)
+        and header_signature is not None
+        and verify(header_actor, header_signature, key=key)
     )
     if required and not is_signed:
         raise ValueError("401:invalid or missing X-Ops-Actor-Signature")

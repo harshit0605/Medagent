@@ -37,3 +37,14 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  # Type-check the curated core modules (the [tool.mypy] files list).
+  # Runs the locally-installed mypy so it shares the project venv + config.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (core modules)
+        entry: mypy
+        language: system
+        pass_filenames: false
+        always_run: true

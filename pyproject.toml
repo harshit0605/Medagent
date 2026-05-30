@@ -31,6 +31,7 @@ dev = [
   "pytest-asyncio>=0.24",
   "pytest-xdist>=3.6",
   "ruff>=0.5.0",
+  "mypy>=1.11",
 ]
 # Local, on-host voice-note transcription (WhatsApp voice notes → text).
 # Optional so CPU/disk-heavy model weights aren't pulled in deployments
@@ -53,3 +54,22 @@ markers = [
 
 [tool.ruff]
 line-length = 100
+
+# Gradual typing. The codebase predates mypy, so a repo-wide strict run would
+# emit thousands of legacy errors and never go green. Instead we type-check a
+# curated set of security/reliability PRIMITIVES strictly (the ``files`` list)
+# and keep the door open to expand it module-by-module. CI runs
+# ``mypy`` (no args) which picks up exactly this ``files`` list.
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+files = [
+  "app/circuit_breaker.py",
+  "app/health.py",
+  "app/operator_signature.py",
+  "app/logging_redact.py",
+  "app/security/crypto.py",
+  "app/db/repositories/erasure_requests.py",
+  "app/db/repositories/operator_actions.py",
+]

@@ -14,7 +14,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db.models import Patient
-from app.db.repositories import erasure_requests as er_repo
 from app.db.session import get_sessionmaker
 
 pytestmark = pytest.mark.skipif(
