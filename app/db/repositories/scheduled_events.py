@@ -137,6 +137,67 @@ async def enqueue_idempotent(
     return await session.get(ScheduledEvent, new_id)
 
 
+async def bulk_enqueue_idempotent(
+    session: AsyncSession,
+    specs: list[dict[str, Any]],
+) -> set[str]:
+    """Insert many idempotency-keyed one-shot events in a SINGLE statement.
+
+    Each spec dict needs: ``event_type``, ``patient_id``, ``payload``,
+    ``idempotency_key``, ``scheduled_for``. Returns the set of
+    ``idempotency_key`` values that were actually inserted (conflicts are
+    silently skipped, exactly like ``enqueue_idempotent``).
+
+    Use this when a materializer enqueues a fixed batch of independent events
+    for one entity (e.g. the pregnancy / postpartum milestone schedules) —
+    one round trip instead of N. NOT for events whose payload references a
+    sibling row's freshly-minted id (the dose path), since those need the
+    insert-then-reference ordering.
+
+    Empty input is a no-op. Duplicate keys WITHIN the batch are de-duplicated
+    before the insert (Postgres rejects an ON CONFLICT statement that has the
+    same arbiter key twice in one command).
+    """
+    if not specs:
+        return set()
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    seen: set[str] = set()
+    values: list[dict[str, Any]] = []
+    for spec in specs:
+        key = spec["idempotency_key"]
+        if key in seen:
+            continue
+        seen.add(key)
+        when = spec.get("scheduled_for") or datetime.now(timezone.utc)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        values.append(
+            {
+                "event_type": spec["event_type"],
+                "patient_id": spec["patient_id"],
+                "payload": spec["payload"],
+                "scheduled_for": when,
+                "status": ScheduledEventStatus.pending,
+                "idempotency_key": key,
+            }
+        )
+
+    stmt = (
+        pg_insert(ScheduledEvent)
+        .values(values)
+        .on_conflict_do_nothing(
+            index_elements=["idempotency_key"],
+            index_where=ScheduledEvent.idempotency_key.isnot(None),
+        )
+        .returning(ScheduledEvent.idempotency_key)
+    )
+    inserted = (await session.execute(stmt)).scalars().all()
+    await session.flush()
+    return set(inserted)
+
+
 async def fetch_due(
     session: AsyncSession, *, now: datetime | None = None, limit: int = 50
 ) -> list[ScheduledEvent]:

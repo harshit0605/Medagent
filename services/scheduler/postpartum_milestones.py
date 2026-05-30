@@ -115,9 +115,10 @@ async def materialize_for_pregnancy(
     patient_phone: str,
     timezone_name: str | None = None,
     now: datetime | None = None,
-) -> list[ScheduledEvent]:
+) -> list[dict]:
     """Enqueue any not-yet-scheduled PP milestone + weekly check-in events
     whose target time is in the future. Idempotent per ``pregnancy.id``.
+    One bulk insert; returns the inserted event-spec dicts.
 
     Skips silently if the row isn't in postpartum (``postpartum_active`` is
     False or ``delivery_date`` is unset) — caller errors don't blow up the
@@ -141,7 +142,7 @@ async def materialize_for_pregnancy(
         if e.event_type == POSTPARTUM_WEEKLY_EVENT_TYPE
     }
 
-    out: list[ScheduledEvent] = []
+    specs: list[dict] = []
 
     # --- milestones ---------------------------------------------------------
     for milestone, target_date in pp.milestone_dates(pregnancy.delivery_date):
@@ -150,25 +151,26 @@ async def materialize_for_pregnancy(
         target_utc = _target_utc(target_date, tz)
         if target_utc <= when_now:
             continue
-        row = await scheduled_events_repo.enqueue_idempotent(
-            db,
-            event_type=POSTPARTUM_MILESTONE_EVENT_TYPE,
-            patient_id=patient_phone,
-            payload={
-                "pregnancy_id": pregnancy.id,
-                "patient_db_id": pregnancy.patient_id,
-                "milestone_key": milestone.key,
-                "kind": milestone.kind,
-                "title": milestone.title,
-                "detail": milestone.detail,
-                "pp_day": milestone.day,
-                "target_date_iso": target_date.isoformat(),
-            },
-            idempotency_key=f"pp_milestone:{pregnancy.id}:{milestone.key}",
-            scheduled_for=target_utc,
+        specs.append(
+            {
+                "event_type": POSTPARTUM_MILESTONE_EVENT_TYPE,
+                "patient_id": patient_phone,
+                "payload": {
+                    "pregnancy_id": pregnancy.id,
+                    "patient_db_id": pregnancy.patient_id,
+                    "milestone_key": milestone.key,
+                    "kind": milestone.kind,
+                    "title": milestone.title,
+                    "detail": milestone.detail,
+                    "pp_day": milestone.day,
+                    "target_date_iso": target_date.isoformat(),
+                },
+                "idempotency_key": (
+                    f"pp_milestone:{pregnancy.id}:{milestone.key}"
+                ),
+                "scheduled_for": target_utc,
+            }
         )
-        if row is not None:
-            out.append(row)
 
     # --- weekly check-ins (rolling horizon) ---------------------------------
     for week, target_date in pp.next_weekly_checkins(
@@ -179,22 +181,26 @@ async def materialize_for_pregnancy(
         target_utc = _target_utc(target_date, tz)
         if target_utc <= when_now:
             continue
-        row = await scheduled_events_repo.enqueue_idempotent(
-            db,
-            event_type=POSTPARTUM_WEEKLY_EVENT_TYPE,
-            patient_id=patient_phone,
-            payload={
-                "pregnancy_id": pregnancy.id,
-                "patient_db_id": pregnancy.patient_id,
-                "pp_week": week,
-                "focus": pp.weekly_focus(week),
-                "target_date_iso": target_date.isoformat(),
-            },
-            idempotency_key=f"pp_weekly:{pregnancy.id}:{week}",
-            scheduled_for=target_utc,
+        specs.append(
+            {
+                "event_type": POSTPARTUM_WEEKLY_EVENT_TYPE,
+                "patient_id": patient_phone,
+                "payload": {
+                    "pregnancy_id": pregnancy.id,
+                    "patient_db_id": pregnancy.patient_id,
+                    "pp_week": week,
+                    "focus": pp.weekly_focus(week),
+                    "target_date_iso": target_date.isoformat(),
+                },
+                "idempotency_key": f"pp_weekly:{pregnancy.id}:{week}",
+                "scheduled_for": target_utc,
+            }
         )
-        if row is not None:
-            out.append(row)
+
+    inserted_keys = await scheduled_events_repo.bulk_enqueue_idempotent(
+        db, specs
+    )
+    out = [s for s in specs if s["idempotency_key"] in inserted_keys]
 
     return out
 
@@ -222,11 +228,11 @@ async def materialize_for_all_active(
         )
         new_milestones += sum(
             1 for e in created
-            if e.event_type == POSTPARTUM_MILESTONE_EVENT_TYPE
+            if e["event_type"] == POSTPARTUM_MILESTONE_EVENT_TYPE
         )
         new_weekly += sum(
             1 for e in created
-            if e.event_type == POSTPARTUM_WEEKLY_EVENT_TYPE
+            if e["event_type"] == POSTPARTUM_WEEKLY_EVENT_TYPE
         )
     return {
         "postpartum_examined": len(active),

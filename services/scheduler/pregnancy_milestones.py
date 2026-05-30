@@ -115,9 +115,13 @@ async def materialize_for_pregnancy(
     patient_phone: str,
     timezone_name: str | None = None,
     now: datetime | None = None,
-) -> list[ScheduledEvent]:
+) -> list[dict]:
     """Enqueue any not-yet-scheduled milestone + weekly-check-in events whose
-    target time is in the future. Idempotent per ``pregnancy.id``."""
+    target time is in the future. Idempotent per ``pregnancy.id``.
+
+    Returns the list of inserted event-spec dicts (each has ``event_type``,
+    ``payload``, etc.) — a single bulk insert under the hood, so the return is
+    spec dicts rather than ORM rows. The caller counts them by event_type."""
     try:
         lmp, _edd = preg.resolve_lmp_edd(pregnancy.lmp_date, pregnancy.edd)
     except ValueError:
@@ -139,7 +143,11 @@ async def materialize_for_pregnancy(
         if e.event_type == PREGNANCY_WEEKLY_EVENT_TYPE
     }
 
-    out: list[ScheduledEvent] = []
+    # Collect every to-schedule event into a spec list, then insert the whole
+    # batch in ONE statement (bulk_enqueue_idempotent) instead of N round
+    # trips. Returns the subset of specs that were actually inserted — the
+    # caller counts them by ``event_type``.
+    specs: list[dict] = []
 
     # --- milestones ---------------------------------------------------------
     for milestone, target_date in preg.milestone_dates(lmp):
@@ -148,25 +156,26 @@ async def materialize_for_pregnancy(
         target_utc = _target_utc(target_date, tz)
         if target_utc <= when_now:
             continue
-        row = await scheduled_events_repo.enqueue_idempotent(
-            db,
-            event_type=PREGNANCY_MILESTONE_EVENT_TYPE,
-            patient_id=patient_phone,
-            payload={
-                "pregnancy_id": pregnancy.id,
-                "patient_db_id": pregnancy.patient_id,
-                "milestone_key": milestone.key,
-                "kind": milestone.kind,
-                "title": milestone.title,
-                "detail": milestone.detail,
-                "ga_week": milestone.week,
-                "target_date_iso": target_date.isoformat(),
-            },
-            idempotency_key=f"preg_milestone:{pregnancy.id}:{milestone.key}",
-            scheduled_for=target_utc,
+        specs.append(
+            {
+                "event_type": PREGNANCY_MILESTONE_EVENT_TYPE,
+                "patient_id": patient_phone,
+                "payload": {
+                    "pregnancy_id": pregnancy.id,
+                    "patient_db_id": pregnancy.patient_id,
+                    "milestone_key": milestone.key,
+                    "kind": milestone.kind,
+                    "title": milestone.title,
+                    "detail": milestone.detail,
+                    "ga_week": milestone.week,
+                    "target_date_iso": target_date.isoformat(),
+                },
+                "idempotency_key": (
+                    f"preg_milestone:{pregnancy.id}:{milestone.key}"
+                ),
+                "scheduled_for": target_utc,
+            }
         )
-        if row is not None:
-            out.append(row)
 
     # --- weekly check-ins (rolling horizon) ---------------------------------
     for week, target_date in preg.next_weekly_checkins(
@@ -177,24 +186,26 @@ async def materialize_for_pregnancy(
         target_utc = _target_utc(target_date, tz)
         if target_utc <= when_now:
             continue
-        row = await scheduled_events_repo.enqueue_idempotent(
-            db,
-            event_type=PREGNANCY_WEEKLY_EVENT_TYPE,
-            patient_id=patient_phone,
-            payload={
-                "pregnancy_id": pregnancy.id,
-                "patient_db_id": pregnancy.patient_id,
-                "ga_week": week,
-                "focus": preg.weekly_focus(week),
-                "target_date_iso": target_date.isoformat(),
-            },
-            idempotency_key=f"preg_weekly:{pregnancy.id}:{week}",
-            scheduled_for=target_utc,
+        specs.append(
+            {
+                "event_type": PREGNANCY_WEEKLY_EVENT_TYPE,
+                "patient_id": patient_phone,
+                "payload": {
+                    "pregnancy_id": pregnancy.id,
+                    "patient_db_id": pregnancy.patient_id,
+                    "ga_week": week,
+                    "focus": preg.weekly_focus(week),
+                    "target_date_iso": target_date.isoformat(),
+                },
+                "idempotency_key": f"preg_weekly:{pregnancy.id}:{week}",
+                "scheduled_for": target_utc,
+            }
         )
-        if row is not None:
-            out.append(row)
 
-    return out
+    inserted_keys = await scheduled_events_repo.bulk_enqueue_idempotent(
+        db, specs
+    )
+    return [s for s in specs if s["idempotency_key"] in inserted_keys]
 
 
 async def materialize_for_all_active(
@@ -220,11 +231,11 @@ async def materialize_for_all_active(
         )
         new_milestones += sum(
             1 for e in created
-            if e.event_type == PREGNANCY_MILESTONE_EVENT_TYPE
+            if e["event_type"] == PREGNANCY_MILESTONE_EVENT_TYPE
         )
         new_weekly += sum(
             1 for e in created
-            if e.event_type == PREGNANCY_WEEKLY_EVENT_TYPE
+            if e["event_type"] == PREGNANCY_WEEKLY_EVENT_TYPE
         )
     return {
         "pregnancies_examined": len(active),

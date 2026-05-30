@@ -74,6 +74,62 @@ async def test_enqueue_idempotent_dedupes_on_key():
     assert rows[0].payload == {"x": 1}  # the first writer won
 
 
+async def test_bulk_enqueue_idempotent_inserts_and_skips_conflicts():
+    SessionLocal = get_sessionmaker()
+    phone = f"bulk-{uuid.uuid4().hex[:8]}"
+    k1 = f"bulk-a:{uuid.uuid4().hex}"
+    k2 = f"bulk-b:{uuid.uuid4().hex}"
+    now = datetime.now(timezone.utc)
+
+    def _spec(key, x):
+        return {
+            "event_type": "pregnancy_weekly_due",
+            "patient_id": phone,
+            "payload": {"x": x},
+            "idempotency_key": key,
+            "scheduled_for": now,
+        }
+
+    # First batch: both keys new + an intentional within-batch duplicate of k1.
+    async with SessionLocal() as db:
+        inserted = await se_repo.bulk_enqueue_idempotent(
+            db, [_spec(k1, 1), _spec(k2, 2), _spec(k1, 99)]
+        )
+        await db.commit()
+    assert inserted == {k1, k2}  # within-batch dup of k1 collapsed
+
+    # Second batch: k1 already exists (conflict), k3 is new.
+    k3 = f"bulk-c:{uuid.uuid4().hex}"
+    async with SessionLocal() as db:
+        inserted2 = await se_repo.bulk_enqueue_idempotent(
+            db, [_spec(k1, 100), _spec(k3, 3)]
+        )
+        await db.commit()
+    assert inserted2 == {k3}  # k1 skipped, only k3 inserted
+
+    # Exactly one row per key; the first writer's payload won for k1.
+    async with SessionLocal() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(ScheduledEvent).where(
+                        ScheduledEvent.idempotency_key.in_([k1, k2, k3])
+                    )
+                )
+            ).scalars().all()
+        )
+    by_key = {r.idempotency_key: r for r in rows}
+    assert set(by_key) == {k1, k2, k3}
+    assert by_key[k1].payload == {"x": 1}
+
+
+async def test_bulk_enqueue_idempotent_empty_is_noop():
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        out = await se_repo.bulk_enqueue_idempotent(db, [])
+    assert out == set()
+
+
 async def test_materialize_pregnancy_twice_is_idempotent():
     suffix = uuid.uuid4().hex[:8]
     phone = f"idem-preg-{suffix}"

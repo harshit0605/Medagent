@@ -21,24 +21,26 @@ _LMP = date(2026, 1, 1)
 
 @pytest.fixture()
 def capture_enqueue(monkeypatch):
-    """Patch the idempotent enqueue to record calls + return a lightweight row."""
+    """Patch the bulk idempotent enqueue to record the spec batch + report
+    every spec as inserted. The materializer now collects all events into a
+    spec list and inserts them in one ``bulk_enqueue_idempotent`` call."""
     calls: list[SimpleNamespace] = []
 
-    async def fake_enqueue(
-        _db, *, event_type, patient_id, payload, idempotency_key, scheduled_for
-    ):
-        row = SimpleNamespace(
-            event_type=event_type,
-            patient_id=patient_id,
-            payload=payload,
-            idempotency_key=idempotency_key,
-            scheduled_for=scheduled_for,
-        )
-        calls.append(row)
-        return row
+    async def fake_bulk(_db, specs):
+        for s in specs:
+            calls.append(
+                SimpleNamespace(
+                    event_type=s["event_type"],
+                    patient_id=s["patient_id"],
+                    payload=s["payload"],
+                    idempotency_key=s["idempotency_key"],
+                    scheduled_for=s["scheduled_for"],
+                )
+            )
+        return {s["idempotency_key"] for s in specs}
 
     monkeypatch.setattr(
-        pm.scheduled_events_repo, "enqueue_idempotent", fake_enqueue
+        pm.scheduled_events_repo, "bulk_enqueue_idempotent", fake_bulk
     )
     return calls
 
@@ -81,7 +83,7 @@ async def test_materialize_enqueues_future_only(monkeypatch, capture_enqueue):
     # Week-20 milestone is in the future → scheduled.
     assert "scan_anomaly" in keys
     # Every enqueued event is scheduled strictly after now.
-    assert all(c.scheduled_for > _NOW for c in created)
+    assert all(c["scheduled_for"] > _NOW for c in created)
     # Weekly rolling horizon: the next two completed weeks (13, 14).
     assert _weekly_weeks(capture_enqueue) == {13, 14}
 
