@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1319,7 +1319,26 @@ def _refill_stage(days_left: int) -> str:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    """Liveness — process up?"""
     return {"status": "ok"}
+
+
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready(response: Response) -> dict[str, object]:
+    """Readiness — DB reachable + Fernet loadable. The scheduler doesn't serve
+    LLM traffic, so it skips the LLM check. 503 when the DB is down so the
+    deploy system knows the sweeps aren't running against a live DB."""
+    from app.health import readiness_report
+
+    ready, report = await readiness_report(check_llm=False)
+    if not ready:
+        response.status_code = 503
+    return report
 
 
 @app.post("/emit-dose-due", response_model=ScheduledEventDTO)

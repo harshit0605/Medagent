@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -178,7 +178,9 @@ _ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "") == "1"
 # secret, verified inside the handler). ``/docs`` / ``/redoc`` /
 # ``/openapi.json`` are deliberately NOT exempt: the schema enumerates every
 # PHI endpoint and must require the key when auth is enabled.
-_AUTH_EXEMPT_EXACT: frozenset[str] = frozenset({"/health"})
+_AUTH_EXEMPT_EXACT: frozenset[str] = frozenset(
+    {"/health", "/health/live", "/health/ready"}
+)
 _AUTH_EXEMPT_PREFIXES: tuple[str, ...] = ("/webhooks/",)
 
 
@@ -360,7 +362,26 @@ async def _invoke_graph(
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    """Liveness — is the process up? Trivial 200; never touches dependencies
+    (a slow DB must not make us look dead and get killed)."""
     return {"status": "ok"}
+
+
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready(response: Response) -> dict[str, object]:
+    """Readiness — can this replica serve traffic? Pings DB + checks Fernet +
+    LLM config. 503 when not ready so a load balancer routes around us."""
+    from app.health import readiness_report
+
+    ready, report = await readiness_report()
+    if not ready:
+        response.status_code = 503
+    return report
 
 
 def _infer_handler_used(audit_reasons: list[str]) -> str:

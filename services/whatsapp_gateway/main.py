@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,7 +50,9 @@ log = logging.getLogger(__name__)
 # unauthenticated message-sending surface is never the silent default.
 _GATEWAY_API_KEY = os.getenv("GATEWAY_API_KEY", "")
 _ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "") == "1"
-_AUTH_EXEMPT_EXACT: frozenset[str] = frozenset({"/health"})
+_AUTH_EXEMPT_EXACT: frozenset[str] = frozenset(
+    {"/health", "/health/live", "/health/ready"}
+)
 
 
 def _check_auth_config() -> None:
@@ -107,7 +109,25 @@ DEFAULT_LOG_LIMIT = 1000
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    """Liveness — process up?"""
     return {"status": "ok"}
+
+
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready(response: Response) -> dict[str, object]:
+    """Readiness — DB reachable? The gateway doesn't use the LLM, so it skips
+    that check; Fernet isn't used here either. 503 when the DB is down."""
+    from app.health import readiness_report
+
+    ready, report = await readiness_report(check_llm=False, check_fernet=False)
+    if not ready:
+        response.status_code = 503
+    return report
 
 
 @app.post("/webhook")
