@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from app.logging_redact import redact_phone
+
 log = logging.getLogger(__name__)
 
 
@@ -229,6 +231,15 @@ async def handle_vitals_log(
             >= week_ago
         )
 
+        # --- sliding-scale insulin recommendation (SoT §3A) ---------------
+        # If a glucose reading was logged AND the patient has an active
+        # sliding-scale insulin regimen, echo back the care-team-defined dose
+        # for this reading. Advisory only — never auto-administers; the two
+        # dangerous ends (hypo / severe-hyper) escalate.
+        insulin_note, insulin_escalate = await _insulin_recommendation(
+            db, patient.id, readings
+        )
+
         await db.commit()
 
     body = "Logged your readings:\n" + "\n".join(
@@ -240,14 +251,83 @@ async def handle_vitals_log(
             f"{readings[0].metric_label.lower()} readings this week — "
             "nice consistency."
         )
+    if insulin_note:
+        body += "\n\n" + insulin_note
     body += "\n\nReply with another reading anytime, or HELP for support."
 
     log.info(
         "vitals logged for %s: %s",
-        patient_phone,
+        redact_phone(patient_phone),
         ",".join(logged_metrics),
     )
+    audit = ["vitals_self_report"]
+    if insulin_note:
+        audit.append("insulin_sliding_scale_suggested")
+    if insulin_escalate:
+        audit.append("insulin_safety_escalate")
     return {
         "response_body": body,
-        "audit_reasons": ["vitals_self_report"],
+        "audit_reasons": audit,
     }
+
+
+async def _insulin_recommendation(
+    db, patient_id: int, readings
+) -> tuple[str | None, bool]:
+    """Build a sliding-scale insulin note for a glucose reading, or
+    ``(None, False)`` when there's no glucose reading / no sliding-scale
+    regimen. Returns ``(note, escalate)``."""
+    glucose = next(
+        (r for r in readings if r.metric_key == "blood_glucose"), None
+    )
+    if glucose is None:
+        return None, False
+
+    from datetime import datetime, timezone
+
+    from app.db.repositories import regimens as regimens_repo
+    from services.orchestrator import insulin
+
+    today = datetime.now(timezone.utc).date()
+    regimens = await regimens_repo.list_for_patient(
+        db, patient_id, active_on=today
+    )
+    rule_regimen = next(
+        (
+            r
+            for r in regimens
+            if insulin.is_sliding_scale(getattr(r, "dosing_rule", None))
+            and insulin.validate_sliding_scale(r.dosing_rule)
+        ),
+        None,
+    )
+    if rule_regimen is None:
+        return None, False
+
+    rec = insulin.resolve_units(rule_regimen.dosing_rule, float(glucose.value))
+    med = rule_regimen.medication_name
+
+    if rec.reason == "hypo":
+        return (
+            f"⚠️ Your blood sugar ({int(glucose.value)} mg/dL) is "
+            f"{rec.band_label} — this is too low to take {med}. Have some "
+            "fast-acting sugar (juice/glucose) and re-check in 15 min. "
+            "Reply HELP or call your care team now if you feel unwell.",
+            True,
+        )
+
+    if rec.units is None:
+        return None, False
+
+    note = (
+        f"For {med}: at {int(glucose.value)} mg/dL ({rec.band_label}), your "
+        f"care team's sliding scale suggests {rec.units} unit(s). "
+        "Always confirm with your care team before dosing."
+    )
+    if rec.escalate:
+        note += (
+            f"\n\n⚠️ {int(glucose.value)} mg/dL is very high — I've flagged "
+            "this for urgent review. If you have nausea, vomiting, or trouble "
+            "breathing, reply HELP or seek care now."
+        )
+    return note, rec.escalate

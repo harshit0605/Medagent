@@ -300,6 +300,11 @@ class Regimen(TimestampMixin, Base):
     supply_days_initial: Mapped[int | None] = mapped_column(Integer)
     supply_started_on: Mapped[date | None] = mapped_column(Date)
 
+    # Sliding-scale / conditional dosing (insulin — SoT §3A; migration 0053).
+    # NULL = fixed-dose regimen (the ``dose`` string). When present, a
+    # glucose-conditional sliding-scale validated by services.orchestrator.insulin.
+    dosing_rule: Mapped[dict | None] = mapped_column(JSON)
+
     patient: Mapped[Patient] = relationship(back_populates="regimens")
     prescription: Mapped[Prescription | None] = relationship(back_populates="regimens")
     adherence_events: Mapped[list[AdherenceEvent]] = relationship(back_populates="regimen")
