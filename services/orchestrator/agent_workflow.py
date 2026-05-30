@@ -459,6 +459,35 @@ async def run_agent_workflow(
                     ),
                 )
 
+    # Self-service reminder-time change (G1): "change my reminder to 9am".
+    if inbound_text:
+        from services.orchestrator.reminder_time_handler import (
+            handle_time_change,
+            looks_like_time_change,
+        )
+
+        if looks_like_time_change(inbound_text):
+            delta = await handle_time_change(
+                patient_phone=patient_id, new_user_text=inbound_text
+            )
+            if delta is not None:
+                return WorkflowResult(
+                    intent="adherence_update",
+                    risk_level="low",
+                    use_template=False,
+                    policy_reason="reminder_time_change",
+                    policy_reason_codes=("reminder_time_change",),
+                    flow_action="ALLOW",
+                    escalation_required=False,
+                    escalation_reason=None,
+                    response_body=delta["response_body"],
+                    template_name=None,
+                    quick_replies=["CALL", "HELP"],
+                    audit_reasons=delta.get(
+                        "audit_reasons", ["reminder_time_change"]
+                    ),
+                )
+
     # Order substitution approve/decline tap — sync-fallback parity with the
     # graph router's order_handler.
     if inbound_text:

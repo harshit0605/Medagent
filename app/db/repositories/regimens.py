@@ -83,6 +83,21 @@ async def get(session: AsyncSession, regimen_id: int) -> Regimen | None:
     return await session.get(Regimen, regimen_id)
 
 
+async def set_schedule(
+    session: AsyncSession, regimen_id: int, *, schedule: dict
+) -> Regimen | None:
+    """Replace a regimen's schedule (e.g. patient-requested reminder-time
+    change). Caller is responsible for cancelling + re-materializing dose
+    events to reflect the new times."""
+    row = await session.get(Regimen, regimen_id)
+    if row is None:
+        return None
+    row.schedule = schedule
+    await session.flush()
+    await session.refresh(row)
+    return row
+
+
 async def list_for_patient(
     session: AsyncSession,
     patient_id: int,
