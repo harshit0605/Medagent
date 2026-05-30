@@ -177,7 +177,7 @@ function interactiveReplyIdFrom(message: Message): string | null {
  *  Dose-button text intentionally starts with "[dose-action]" so the
  *  orchestrator's deterministic dose handler can short-circuit BEFORE the
  *  LLM intent classifier — these are pure CRUD actions, no LLM needed. */
-function textFromButtonId(buttonId: string): string | null {
+export function textFromButtonId(buttonId: string): string | null {
   if (buttonId.startsWith("cancel_appt:")) {
     const apptId = buttonId.slice("cancel_appt:".length).trim();
     if (!apptId) return null;
