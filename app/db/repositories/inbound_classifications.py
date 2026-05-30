@@ -1,11 +1,55 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InboundClassification
+
+
+async def handler_quality(
+    session: AsyncSession, *, window_days: int = 30
+) -> list[dict[str, Any]]:
+    """Per-handler reply-quality breakdown from operator/doctor thumbs feedback
+    (F6). For each ``handler_used`` with at least one rated reply in the
+    window, returns ``{handler, total_rated, thumbs_up, thumbs_down,
+    up_rate}``. Surfaces which handlers operators rate poorly so prompt /
+    template work can be prioritised. Sorted worst-up-rate first."""
+    since = datetime.now(timezone.utc) - timedelta(days=window_days)
+    up = func.count().filter(InboundClassification.feedback_rating > 0)
+    down = func.count().filter(InboundClassification.feedback_rating < 0)
+    total = func.count()
+    stmt = (
+        select(
+            func.coalesce(
+                InboundClassification.handler_used, "(unattributed)"
+            ).label("handler"),
+            total.label("total_rated"),
+            up.label("thumbs_up"),
+            down.label("thumbs_down"),
+        )
+        .where(InboundClassification.feedback_rating.isnot(None))
+        .where(InboundClassification.feedback_at >= since)
+        .group_by(InboundClassification.handler_used)
+    )
+    rows = (await session.execute(stmt)).all()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        total_rated = r.total_rated or 0
+        up_rate = (r.thumbs_up / total_rated) if total_rated else 0.0
+        out.append(
+            {
+                "handler": r.handler,
+                "total_rated": total_rated,
+                "thumbs_up": r.thumbs_up,
+                "thumbs_down": r.thumbs_down,
+                "up_rate": round(up_rate, 3),
+            }
+        )
+    out.sort(key=lambda d: (d["up_rate"], -d["total_rated"]))
+    return out
 
 
 # Allowlist of values written to the ``category`` column. Validated at

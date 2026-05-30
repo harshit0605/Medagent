@@ -15,9 +15,37 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import dashboard as dashboard_repo
+from app.db.repositories import inbound_classifications as inbound_repo
 from app.db.session import get_session
 
 router = APIRouter()
+
+
+class HandlerQualityRowDTO(BaseModel):
+    handler: str
+    total_rated: int
+    thumbs_up: int
+    thumbs_down: int
+    up_rate: float
+
+
+@router.get(
+    "/ops/analytics/handler-quality",
+    response_model=list[HandlerQualityRowDTO],
+)
+async def get_handler_quality(
+    db: AsyncSession = Depends(get_session),
+    window_days: int = 30,
+) -> list[HandlerQualityRowDTO]:
+    """Per-handler reply-quality monitor (F6): operator/doctor thumbs feedback
+    grouped by the handler that answered, worst up-rate first. Drives
+    prompt/template improvement on the handlers operators rate poorly."""
+    if window_days < 1 or window_days > 365:
+        raise HTTPException(
+            status_code=400, detail="window_days must be between 1 and 365"
+        )
+    rows = await inbound_repo.handler_quality(db, window_days=window_days)
+    return [HandlerQualityRowDTO(**r) for r in rows]
 
 
 class AdherenceSnapshotDTO(BaseModel):
