@@ -58,3 +58,41 @@ def test_get_pharmacy_adapter_returns_protocol(monkeypatch):
     monkeypatch.setattr(pharmacy, "_adapter", None)
     adapter = get_pharmacy_adapter()
     assert isinstance(adapter, PharmacyAdapter)
+
+
+async def test_deeplink_allowlist_drops_off_host_url(monkeypatch):
+    """A template that resolves to a non-allowlisted host is dropped."""
+    monkeypatch.setenv("PHARMACY_ALLOWED_HOSTS", "acme.example")
+    monkeypatch.setenv(
+        "PHARMACY_DEEPLINK_TEMPLATE", "https://evil.attacker.test/o?med={med}"
+    )
+    adapter = DeepLinkPharmacyAdapter()
+    result = await adapter.place_order(
+        OrderRequest(patient_phone="p", medication_name="Metformin")
+    )
+    assert result.deeplink is None  # off-allowlist → manual fulfillment
+
+
+async def test_deeplink_allowlist_permits_allowed_host_and_subdomain(monkeypatch):
+    monkeypatch.setenv("PHARMACY_ALLOWED_HOSTS", "acme.example, partner.test")
+    monkeypatch.setenv(
+        "PHARMACY_DEEPLINK_TEMPLATE", "https://rx.acme.example/o?med={med}"
+    )
+    adapter = DeepLinkPharmacyAdapter()
+    result = await adapter.place_order(
+        OrderRequest(patient_phone="p", medication_name="Metformin")
+    )
+    assert result.deeplink is not None  # subdomain of an allowlisted host
+
+
+async def test_deeplink_no_allowlist_is_unrestricted(monkeypatch):
+    """Back-compat: with no allowlist configured, any host is permitted."""
+    monkeypatch.delenv("PHARMACY_ALLOWED_HOSTS", raising=False)
+    monkeypatch.setenv(
+        "PHARMACY_DEEPLINK_TEMPLATE", "https://anywhere.test/o?med={med}"
+    )
+    adapter = DeepLinkPharmacyAdapter()
+    result = await adapter.place_order(
+        OrderRequest(patient_phone="p", medication_name="m")
+    )
+    assert result.deeplink is not None

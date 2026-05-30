@@ -18,11 +18,35 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit
 
 from app.db.models import OrderStatus
 
 log = logging.getLogger(__name__)
+
+
+def _allowed_pharmacy_hosts() -> frozenset[str]:
+    """Allowlisted hostnames a pharmacy deep-link may point at. Comma-separated
+    ``PHARMACY_ALLOWED_HOSTS``. Empty = no host restriction (back-compat —
+    deployments without partner integrations don't need to configure it). When
+    set, a deep-link whose host isn't on the list is dropped (fall back to
+    manual fulfillment) so a mis-set template can't redirect a patient to an
+    attacker-controlled URL."""
+    raw = os.getenv("PHARMACY_ALLOWED_HOSTS", "")
+    return frozenset(h.strip().lower() for h in raw.split(",") if h.strip())
+
+
+def _host_allowed(url: str, allowed: frozenset[str]) -> bool:
+    if not allowed:
+        return True  # no allowlist configured → unrestricted (back-compat)
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return False
+    # Exact host or a subdomain of an allowlisted host.
+    return any(
+        host == a or host.endswith("." + a) for a in allowed
+    )
 
 
 @dataclass(frozen=True)
@@ -68,6 +92,7 @@ class DeepLinkPharmacyAdapter:
     def __init__(self) -> None:
         self.name = os.getenv("PHARMACY_PARTNER_NAME", "manual")
         self._template = os.getenv("PHARMACY_DEEPLINK_TEMPLATE", "")
+        self._allowed_hosts = _allowed_pharmacy_hosts()
 
     async def place_order(self, req: OrderRequest) -> PharmacyResult:
         deeplink: str | None = None
@@ -82,6 +107,17 @@ class DeepLinkPharmacyAdapter:
                 # A malformed template shouldn't break a reorder — fall back to
                 # manual fulfillment.
                 log.warning("pharmacy deeplink template failed: %s", exc)
+                deeplink = None
+            # Allowlist guard: never hand a patient a deep-link whose host
+            # isn't a sanctioned partner. A typo'd / tampered template that
+            # resolves off-allowlist is dropped → manual fulfillment.
+            if deeplink is not None and not _host_allowed(
+                deeplink, self._allowed_hosts
+            ):
+                log.error(
+                    "pharmacy deeplink host not allowlisted; dropping link "
+                    "(set PHARMACY_ALLOWED_HOSTS to include the partner)"
+                )
                 deeplink = None
         return PharmacyResult(
             partner=self.name,
