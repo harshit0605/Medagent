@@ -20,13 +20,13 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/Users/harshit/Code/Misc/Medagent/app/security/crypto.py": {
-    "mtime": 1777630017.0167704,
-    "ast_hash": "194c5684484680af0baa773a8645ce2b",
-    "semantic_hash": "194c5684484680af0baa773a8645ce2b"
+    "mtime": 1780164351.8975074,
+    "ast_hash": "1e93f6d81ba1d2a9d418c8360ba1f474",
+    "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/models.py": {
-    "mtime": 1779806252.8007765,
-    "ast_hash": "ae7805ff2585cbbab206ac2cf644570c",
+    "mtime": 1780167490.833465,
+    "ast_hash": "e18ada70247bd292de852f6ced9fe11f",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/session.py": {
@@ -50,8 +50,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/caregivers.py": {
-    "mtime": 1779805254.1330798,
-    "ast_hash": "10a0d6f4036f54b8ca38bce4993fb336",
+    "mtime": 1780165282.9349172,
+    "ast_hash": "3630d27bf89de92d7988d0281808cee9",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/broadcast_campaigns.py": {
@@ -60,9 +60,9 @@
     "semantic_hash": "2f2413094829196e52ffe85ef89248cb"
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/regimens.py": {
-    "mtime": 1777712214.6793852,
-    "ast_hash": "a77a9858211e39a71126385363acbed5",
-    "semantic_hash": "a77a9858211e39a71126385363acbed5"
+    "mtime": 1780166628.5472288,
+    "ast_hash": "059f68fb49a130bf1ced263348da0257",
+    "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/prescriptions.py": {
     "mtime": 1777787751.3252504,
@@ -75,13 +75,13 @@
     "semantic_hash": "c6851519796c9d8f2ac4bf4cc5112a76"
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/inbound_classifications.py": {
-    "mtime": 1779566596.1088254,
-    "ast_hash": "78e7eb0f3c250bf250974a501025824c",
+    "mtime": 1780167078.7550712,
+    "ast_hash": "43f556f4789728a7fe4ae9aca092f500",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/ops_tickets.py": {
-    "mtime": 1779633617.2470057,
-    "ast_hash": "314ac13470158b21e47f355f1779a087",
+    "mtime": 1780163013.4498997,
+    "ast_hash": "3c9b21dad0eb71e40cd08b4b6ff79e6a",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/appointment_recaps.py": {
@@ -100,9 +100,9 @@
     "semantic_hash": "36f8c76243cc127b9d07b8f71c7155b6"
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/appointments.py": {
-    "mtime": 1777630017.0158527,
-    "ast_hash": "94a337fb473227b1bd5e31f91734228e",
-    "semantic_hash": "94a337fb473227b1bd5e31f91734228e"
+    "mtime": 1780167542.636316,
+    "ast_hash": "ddb687eba56838801fa2d43997c0d4e2",
+    "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/__init__.py": {
     "mtime": 1777630017.015736,
@@ -115,9 +115,9 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/whatsapp_statuses.py": {
-    "mtime": 1777630017.0165024,
-    "ast_hash": "8647c4eb43d4b3c0ab3de58b607f692a",
-    "semantic_hash": "8647c4eb43d4b3c0ab3de58b607f692a"
+    "mtime": 1780162959.6303265,
+    "ast_hash": "cdcd43ffd9e57c97e4b451e4fa4f4090",
+    "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/dashboard.py": {
     "mtime": 1777994735.8792906,
@@ -125,8 +125,8 @@
     "semantic_hash": "c1082111fddd249daa9b687117f6017e"
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/patients.py": {
-    "mtime": 1779800873.7987258,
-    "ast_hash": "6325d5be2607df0b918980eb85172e8b",
+    "mtime": 1780166929.151818,
+    "ast_hash": "a36c391c2051d7133bc8e0c4df490b35",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/delivery_metrics.py": {
@@ -170,8 +170,8 @@
     "semantic_hash": "37efbe61818acee03d5f00470839cd3c"
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/scheduled_events.py": {
-    "mtime": 1779639272.6115246,
-    "ast_hash": "f233cd8e980cfe420f2fbdd202b35a66",
+    "mtime": 1780163477.1183782,
+    "ast_hash": "1e6b0c6b68beab966b5e078d9ccce5ea",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/care_plan_goals.py": {
@@ -195,8 +195,8 @@
     "semantic_hash": "b059c0a29b26eebc699789c6005e6bdb"
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_crypto.py": {
-    "mtime": 1779566596.108979,
-    "ast_hash": "536b31bcf3017434adebab23778929ef",
+    "mtime": 1780164391.5026655,
+    "ast_hash": "f4279173583cdc524bfffb1b9b128b82",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_delivery_alert_sweep.py": {
@@ -210,8 +210,8 @@
     "semantic_hash": "024a5912978dfcd61d1d2b58b1b0f89e"
   },
   "/Users/harshit/Code/Misc/Medagent/tests/conftest.py": {
-    "mtime": 1779800533.9931765,
-    "ast_hash": "937de902f74719c5b3c9e470445685ed",
+    "mtime": 1780163197.0675519,
+    "ast_hash": "b6a93a7255c38e168957dd129ae8e33a",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_refill_handler.py": {
@@ -665,8 +665,8 @@
     "semantic_hash": "d7e1bbf902be140aaa2907c231a34568"
   },
   "/Users/harshit/Code/Misc/Medagent/shared/contracts/models.py": {
-    "mtime": 1779566763.0463583,
-    "ast_hash": "0b3eb6da06f1a429dc89a659194284bd",
+    "mtime": 1780167232.3348768,
+    "ast_hash": "a8125ed9923234db32029e95287732d1",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/shared/contracts/__init__.py": {
@@ -1245,14 +1245,14 @@
     "semantic_hash": "5f5f68b864e15c6268350db81e7d08e6"
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/backend.ts": {
-    "mtime": 1779819617.7984903,
-    "ast_hash": "0e9ad9a96d545cabf7b2aa7a2ea73003",
+    "mtime": 1780167008.8579352,
+    "ast_hash": "659e586257f16cecb601bcab70db9534",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/whatsapp-bot.ts": {
-    "mtime": 1778058127.885213,
-    "ast_hash": "0223d213b55b149faf0d098f453cc606",
-    "semantic_hash": "0223d213b55b149faf0d098f453cc606"
+    "mtime": 1780165152.9541013,
+    "ast_hash": "34fb3d1a2d0f676aff1f0da7bf468b8c",
+    "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/__init__.py": {
     "mtime": 1775560700.6657307,
@@ -1265,8 +1265,8 @@
     "semantic_hash": "32ef4bcaf53edae3242c34b773dbd3a5"
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/dispatcher.py": {
-    "mtime": 1779805316.6823266,
-    "ast_hash": "bebd65c7393c7ae93f79130bb2b87854",
+    "mtime": 1780167830.5540552,
+    "ast_hash": "40d249647b091e2e1ad48d49de1d4b6b",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/recap_sweeps.py": {
@@ -1310,8 +1310,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/missed_doses.py": {
-    "mtime": 1779642551.0543005,
-    "ast_hash": "30fd63cde7065641553a173f90932570",
+    "mtime": 1780165441.5821896,
+    "ast_hash": "fbf53488fe6467d968f6c480706cc820",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/adherence_pattern_sweep.py": {
@@ -1335,8 +1335,8 @@
     "semantic_hash": "043570bc5c9d6c4d1fb12f1a1a008c34"
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/main.py": {
-    "mtime": 1779806157.1613696,
-    "ast_hash": "4e81dcefb1c44d3ef8eb3d8ff09aa38c",
+    "mtime": 1780163376.7388709,
+    "ast_hash": "8d372921a4ba46259b2bffefb8e0e814",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/dose_reminders.py": {
@@ -1365,8 +1365,8 @@
     "semantic_hash": "60a86908cefea5fbff1ae1d563c84029"
   },
   "/Users/harshit/Code/Misc/Medagent/services/whatsapp_gateway/main.py": {
-    "mtime": 1779642901.9558806,
-    "ast_hash": "b047accfe6fc17f10dc7ecf1abf9acfb",
+    "mtime": 1780167239.136943,
+    "ast_hash": "25bcfe80c7d3d064ee7560489955325a",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/whatsapp_gateway/meta.py": {
@@ -1395,9 +1395,9 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/llm_tracking.py": {
-    "mtime": 1778258561.028321,
-    "ast_hash": "7ce577963c1c172bb48786d4e84144be",
-    "semantic_hash": "7ce577963c1c172bb48786d4e84144be"
+    "mtime": 1780164614.1354458,
+    "ast_hash": "6dfc6ecc40e63f62b3d0bdcb2fc90d11",
+    "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/recap_generator.py": {
     "mtime": 1778258582.5874186,
@@ -1435,8 +1435,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/llm.py": {
-    "mtime": 1779805863.8712392,
-    "ast_hash": "9d73cf368a310b75c594566d0d65bb3e",
+    "mtime": 1780164656.9568644,
+    "ast_hash": "3a59d497c4b5183a31ccae65701b49fc",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/side_effect_analytics.py": {
@@ -1475,8 +1475,8 @@
     "semantic_hash": "97e265a424c4c9483dec084f29844ee0"
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/agent_workflow.py": {
-    "mtime": 1779566627.3639958,
-    "ast_hash": "d54771cae833ae88d06d4235eaef08bf",
+    "mtime": 1780166866.230449,
+    "ast_hash": "1fda2a849c0383fa02a45f0d028ac845",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/triage_classifier.py": {
@@ -1515,13 +1515,13 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/main.py": {
-    "mtime": 1779634083.206532,
-    "ast_hash": "1183b4b60f82cce82a70873f5c224c7f",
+    "mtime": 1780166225.7182615,
+    "ast_hash": "8706f896a7e5e6900430ad91f1b61c04",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/dose_handler.py": {
-    "mtime": 1779805398.9770865,
-    "ast_hash": "db43a6acb3f9539aea86a04591a269a4",
+    "mtime": 1780163937.5671384,
+    "ast_hash": "e10dd779c524a8c4edfc77ee117b8a5d",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/caregiver_handler.py": {
@@ -1575,8 +1575,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/operator_actions.py": {
-    "mtime": 1779806266.4777322,
-    "ast_hash": "7b30255c8c599c390b0b4252fe5f26cb",
+    "mtime": 1780163992.8207994,
+    "ast_hash": "2c88d5538e07bff8c6a6e39d6eb30ad0",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/db/repositories/asthma_triggers.py": {
@@ -1615,8 +1615,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_asthma_handler.py": {
-    "mtime": 1779547821.6982088,
-    "ast_hash": "b5438e70ce4fdf7338ade6d945d00758",
+    "mtime": 1780165715.4822745,
+    "ast_hash": "d5da45f7842811a7c22ad4b914bc24fa",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_logging_redact.py": {
@@ -1635,8 +1635,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_pharmacy.py": {
-    "mtime": 1779548582.1298072,
-    "ast_hash": "4f7077f95b55c7bc27911baa26ee3fe7",
+    "mtime": 1780164469.2537317,
+    "ast_hash": "2a6b689b047048035c6b0dfbcfb8464b",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_vitals_handler.py": {
@@ -1645,8 +1645,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_pregnancy_milestones.py": {
-    "mtime": 1779590884.580926,
-    "ast_hash": "b470a9b7e178f712977aed14f3ecb6f8",
+    "mtime": 1780163657.4149811,
+    "ast_hash": "6be592ca63589bad72495927032b045a",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_postpartum_math.py": {
@@ -1670,8 +1670,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/integration/test_scheduled_event_idempotency.py": {
-    "mtime": 1779590993.2919457,
-    "ast_hash": "84d18ce6224da24a8841a217637dc9ae",
+    "mtime": 1780163714.1439295,
+    "ast_hash": "47489b791e093bbd2fc10e58a0c87f80",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/integration/test_households.py": {
@@ -1715,8 +1715,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/integration/test_asthma.py": {
-    "mtime": 1779547869.1211555,
-    "ast_hash": "86b9377d227b104d354bf47c5df59b51",
+    "mtime": 1780165744.708265,
+    "ast_hash": "e7dd5a529f13202764c6e1ac7d9a3cfa",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/integration/test_graph_path.py": {
@@ -1830,13 +1830,13 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/postpartum_milestones.py": {
-    "mtime": 1779804752.529202,
-    "ast_hash": "194a413b11f0b8b72885dedd0b7d3f0f",
+    "mtime": 1780163627.1686528,
+    "ast_hash": "49be0843259de5061a98eabf0392cebc",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/pregnancy_milestones.py": {
-    "mtime": 1779590854.6476707,
-    "ast_hash": "584e8f0e09be11deac1591c62a143a1c",
+    "mtime": 1780163582.7117753,
+    "ast_hash": "b64ea72939f8ec5547cd6b0715ddaf80",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/scheduler/weekly_trend_sweep.py": {
@@ -1860,8 +1860,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/vitals_handler.py": {
-    "mtime": 1779545502.849339,
-    "ast_hash": "5b65c9ac3fe1f9740bb9f082b289aee7",
+    "mtime": 1780165965.9704545,
+    "ast_hash": "18483d4b3a38f2e66583f030aea44e7a",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/post_op.py": {
@@ -1880,8 +1880,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/asthma_handler.py": {
-    "mtime": 1779800757.0998607,
-    "ast_hash": "eceadde2cba0808d00a5dafa882db87b",
+    "mtime": 1780165673.6142344,
+    "ast_hash": "018298214d7242c479bca9c85457dfc3",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/pregnancy.py": {
@@ -1890,8 +1890,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/pharmacy.py": {
-    "mtime": 1779548152.7799358,
-    "ast_hash": "33f25ecc31e9460702b06a3fdcc019ad",
+    "mtime": 1780164439.1800866,
+    "ast_hash": "f548450266c38167e6d0b90769ebdaa0",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/doctors.py": {
@@ -1915,13 +1915,13 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/ops_tickets.py": {
-    "mtime": 1779806383.2774532,
-    "ast_hash": "9ffed285829149772a48d67510f734a2",
+    "mtime": 1779822546.2691708,
+    "ast_hash": "7f287fe102bc33a332a2d5a562b7c43e",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/ops_analytics.py": {
-    "mtime": 1779609573.6085618,
-    "ast_hash": "7987393fd3a492fab0b6be712ae44f69",
+    "mtime": 1780167115.6883738,
+    "ast_hash": "a79994cb94523ac1f8701936efb22fc8",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/post_op.py": {
@@ -1930,13 +1930,13 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/care_plan_exemptions.py": {
-    "mtime": 1779808219.9178388,
-    "ast_hash": "28ddafbd23b6b05f05c1a8dbc405c145",
+    "mtime": 1779822580.2865038,
+    "ast_hash": "87e23263d88664155f858abcc16011e5",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/appointment_recap.py": {
-    "mtime": 1779643011.0053504,
-    "ast_hash": "48d9bbe291604fee60d9d0186e296064",
+    "mtime": 1780167565.3621411,
+    "ast_hash": "3d98a656073ba89fefe8f5fafa81928e",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/audit_search.py": {
@@ -1980,8 +1980,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/patients.py": {
-    "mtime": 1779819528.7327054,
-    "ast_hash": "603974766016a0c7972c4706f02bf637",
+    "mtime": 1780166956.0315657,
+    "ast_hash": "5befe1e399100f3eac4bf936c59942d9",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/households.py": {
@@ -2045,8 +2045,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/.pre-commit-config.yaml": {
-    "mtime": 1779800578.6217754,
-    "ast_hash": "c7979773a9a2cf091d77237303e6e680",
+    "mtime": 1780164928.5050738,
+    "ast_hash": "6c772661203bb704282b2492a409bcef",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/README.md": {
@@ -2080,23 +2080,23 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/docs/template_pack.md": {
-    "mtime": 1779805060.3632705,
-    "ast_hash": "f3055c9bcc8435985cd5831fe038a9bc",
+    "mtime": 1780167399.5006058,
+    "ast_hash": "67e94fc63c900ed6964455f50ea967df",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/docs/ROADMAP.md": {
-    "mtime": 1779564669.669567,
-    "ast_hash": "8c475e8d15e06bbad041be399b7f4ce7",
+    "mtime": 1780167737.891553,
+    "ast_hash": "289dedb23e5d7fa444c0a14c9ea93648",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/docs/FEATURES.md": {
-    "mtime": 1779794733.5026944,
-    "ast_hash": "949895e8febebfff492ad7e5624a7ac9",
+    "mtime": 1780167780.8356109,
+    "ast_hash": "1779b710d08a7bdd484cde642bb246e3",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/.github/workflows/ci.yml": {
-    "mtime": 1779819809.7437186,
-    "ast_hash": "ec55d14ba02f8c1c89b4c63e61515af6",
+    "mtime": 1780164913.4573593,
+    "ast_hash": "12a52f5b25dd152673d16e27746eafe5",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/README.md": {
@@ -2145,8 +2145,8 @@
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/app/operator_signature.py": {
-    "mtime": 1779808354.4464211,
-    "ast_hash": "f440f4010650179c431b56548313ea05",
+    "mtime": 1780164871.6278226,
+    "ast_hash": "ea64a7c01f0ce9381fe63c3c4bae29f5",
     "semantic_hash": ""
   },
   "/Users/harshit/Code/Misc/Medagent/tests/test_operator_signature.py": {
@@ -2177,6 +2177,186 @@
   "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/operator-signature.test.ts": {
     "mtime": 1779819753.899873,
     "ast_hash": "60ccd4654226dfb4403b8f81b2923af0",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/app/health.py": {
+    "mtime": 1780163291.1926095,
+    "ast_hash": "d68a9926d8a7dc9053fd655a3a2f2462",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/app/db/repositories/erasure_requests.py": {
+    "mtime": 1780164171.5663111,
+    "ast_hash": "0524d9b01b3046c03788e68d5f2a6bbf",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/app/db/repositories/pharmacists.py": {
+    "mtime": 1780166170.699443,
+    "ast_hash": "a17993cdca0f75098262e11dab188e9c",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/test_education_handler.py": {
+    "mtime": 1780166877.407715,
+    "ast_hash": "ca7be6e3fe8495cddeb7242c4f40ffdd",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/test_llm_budget.py": {
+    "mtime": 1780164680.130782,
+    "ast_hash": "f626b8acbfa7c213b5cdc8013b54dc7f",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/test_insulin.py": {
+    "mtime": 1780165990.1255572,
+    "ast_hash": "37bde4120b1c023b074f261a230d3019",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/test_pregnancy_nl_handler.py": {
+    "mtime": 1780166426.7170494,
+    "ast_hash": "288adfeb9ebb5ef5d6a583d27c555e34",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/test_reminder_time_handler.py": {
+    "mtime": 1780166708.1372015,
+    "ast_hash": "c86bc7f23c11f1652a3ba8c5059a173f",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_erasure_dual_control.py": {
+    "mtime": 1780164951.7235346,
+    "ast_hash": "120263493b796d6a41f52a68484855c0",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_prescription_ocr_e2e.py": {
+    "mtime": 1780165105.5057938,
+    "ast_hash": "79e952b0c9389c0c26da77a6ca67e619",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_pregnancy_nl.py": {
+    "mtime": 1780166443.5995088,
+    "ast_hash": "44cbbc82e91488464504f012e87d54c8",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_dsar_rate_limit.py": {
+    "mtime": 1780164083.9618917,
+    "ast_hash": "881664bf69314cab5fe0cd5bdd8e8ece",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_pharmacists.py": {
+    "mtime": 1780166251.910915,
+    "ast_hash": "b179067a01d305d886a995b9983e0550",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_patient_search.py": {
+    "mtime": 1780166979.7378585,
+    "ast_hash": "06afc18ff9600cddd8cae2d6092e7b19",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_handler_quality.py": {
+    "mtime": 1780167136.9837067,
+    "ast_hash": "e95cb8c45dcb6a749d78532764c19256",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_template_language.py": {
+    "mtime": 1780167372.9888241,
+    "ast_hash": "5969ece88bd23bb327f32ff7bb842088",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_insulin_sliding_scale.py": {
+    "mtime": 1780166008.265091,
+    "ast_hash": "f070ad8d43af34b010392f44bea892f0",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_delivery_reconcile_sweep.py": {
+    "mtime": 1780163176.212666,
+    "ast_hash": "009ee556193ee260760e15027c76ca39",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_reminder_time_change.py": {
+    "mtime": 1780166723.0021803,
+    "ast_hash": "a0b9aaee109b32bb7e6c3d94055025cd",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_htn_caregiver_alert.py": {
+    "mtime": 1780165417.719833,
+    "ast_hash": "1e8b5ee3eaf908be770a7e7daf64132f",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_appointment_video_link.py": {
+    "mtime": 1780167638.5696952,
+    "ast_hash": "0c185b412e345a7a9a2e437e49ecd2e6",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/tests/integration/test_health_probes.py": {
+    "mtime": 1780163390.4066043,
+    "ast_hash": "425a8cbd3f559514ef0c267ea2bba39f",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/scripts/query_plan_audit.py": {
+    "mtime": 1780164762.6659334,
+    "ast_hash": "3bfc8d58e46f4253e227a46c0aab6516",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/alembic/versions/20260527_0053_regimen_dosing_rule.py": {
+    "mtime": 1780165835.6536055,
+    "ast_hash": "36c7a38b5f86ae0257b39633dc87b998",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/alembic/versions/20260527_0052_erasure_requests.py": {
+    "mtime": 1780164145.8618731,
+    "ast_hash": "3b9518f8504654f177e7dfa0fe0b3ace",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/alembic/versions/20260527_0051_delivery_reconcile_index.py": {
+    "mtime": 1780163138.558293,
+    "ast_hash": "3b3502dd68b14955ff8747a8821c0b6e",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/alembic/versions/20260527_0055_appointment_video_link.py": {
+    "mtime": 1780167453.6041465,
+    "ast_hash": "d49fc29885a225cb8edc042a674ad281",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/alembic/versions/20260527_0054_pharmacists.py": {
+    "mtime": 1780166128.9882362,
+    "ast_hash": "afe552b361b625ad42f4838189f311eb",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/apps/ops_console/src/lib/whatsapp-bot.test.ts": {
+    "mtime": 1780165170.4302497,
+    "ast_hash": "4e7dec6a605a7b7201609adb5baee21e",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/services/scheduler/delivery_reconcile_sweep.py": {
+    "mtime": 1780162988.1567369,
+    "ast_hash": "26aac679ce60ae7cdd5d94c87f31d3f2",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/services/orchestrator/reminder_time_handler.py": {
+    "mtime": 1780166658.186634,
+    "ast_hash": "062878ca8a3fefdcffbc325c2de84553",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/services/orchestrator/insulin.py": {
+    "mtime": 1780165882.5952823,
+    "ast_hash": "e5ca10e7b1b7537e0ccabb23528ed9d6",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/services/orchestrator/pregnancy_nl_handler.py": {
+    "mtime": 1780166521.260037,
+    "ast_hash": "f98c14e56b0b87c8b20493c6ca2bde82",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/services/orchestrator/education_handler.py": {
+    "mtime": 1780166824.7014318,
+    "ast_hash": "84c6717a9fc5734edaa717e14ed01608",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/services/orchestrator/routers/pharmacists.py": {
+    "mtime": 1780166202.8013597,
+    "ast_hash": "47d6a05af1cd185c79c1168cb7f09d79",
+    "semantic_hash": ""
+  },
+  "/Users/harshit/Code/Misc/Medagent/docs/OPS_FOLLOWUPS.md": {
+    "mtime": 1780167701.3556247,
+    "ast_hash": "80d3c27a7d6b98d1657e6e44900be070",
     "semantic_hash": ""
   }
 }
