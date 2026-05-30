@@ -547,6 +547,43 @@ async def run_agent_workflow(
                     ),
                 )
 
+    # Educational microcontent (G5): "what is HbA1c?", "how do I use a spacer?"
+    # Fires LAST among the deterministic handlers (after every structured
+    # flow) and is safety-deferred — a message that also reads as a symptom
+    # goes to triage instead of a canned explainer.
+    if inbound_text:
+        from services.orchestrator.education_handler import (
+            handle_education_query,
+            looks_like_education_query,
+        )
+        from services.orchestrator.side_effect_handler import (
+            looks_like_side_effect_report,
+        )
+
+        if looks_like_education_query(
+            inbound_text
+        ) and not looks_like_side_effect_report(inbound_text):
+            delta = await handle_education_query(
+                patient_phone=patient_id, new_user_text=inbound_text
+            )
+            if delta is not None:
+                return WorkflowResult(
+                    intent="general_question",
+                    risk_level="low",
+                    use_template=False,
+                    policy_reason="education_microcontent",
+                    policy_reason_codes=("education_microcontent",),
+                    flow_action="ALLOW",
+                    escalation_required=False,
+                    escalation_reason=None,
+                    response_body=delta["response_body"],
+                    template_name=None,
+                    quick_replies=["CALL", "HELP"],
+                    audit_reasons=delta.get(
+                        "audit_reasons", ["education_microcontent"]
+                    ),
+                )
+
     intent = await _detect_intent(inbound_text)
     decision = await _evaluate_policy_decision(
         patient_id=patient_id,
