@@ -4,8 +4,8 @@ _Comprehensive catalog of what's built and live in the medagent platform.
 Companion to [`source_of_truth.md`](source_of_truth.md) (product vision) and
 [`ROADMAP.md`](ROADMAP.md) (gap tracker / progress log)._
 
-_Last verified: 2026-05-26 — full unit + integration suites green; all 4
-services live in production._
+_Last verified: 2026-05-27 — full unit + integration suites green; all 4
+services live in production with HMAC-signed operator identity enforced._
 
 ---
 
@@ -15,11 +15,13 @@ services live in production._
 |---|---|
 | **Services** | `orchestrator` (FastAPI/LangGraph), `whatsapp_gateway` (FastAPI), `scheduler` (FastAPI background sweeps), `ops_console` (Next.js 16 / React 19) |
 | **Inbound channels** | WhatsApp Cloud API (text + voice), Google Calendar push, Meta delivery-status callbacks |
-| **Storage** | Postgres (Supabase) via SQLAlchemy 2 async; Alembic migrations at head `0046` |
-| **LLM** | OpenAI (env-gated; deterministic rule-based fallback) |
-| **Background workers** | ~20 sweep modules (dose / refill / lab / recap / care-gap / delivery / SLA / pregnancy / asthma / on-call re-page / weekly-trend / etc.) |
-| **API surface** | ~29 domain routers (`services/orchestrator/routers/`) + a thin `/route` dispatcher |
-| **Tests** | 600 unit + 538 integration (xdist parallel; serial-marker for global-state sweeps) |
+| **Storage** | Postgres (Supabase) via SQLAlchemy 2 async; Alembic migrations at head `0050` |
+| **LLM** | OpenAI (env-gated; deterministic rule-based fallback; per-call cost tracking; circuit-breaker on degraded upstream) |
+| **Background workers** | ~21 sweep modules (dose / refill / lab / recap / care-gap / delivery / SLA / pregnancy / postpartum / asthma / on-call re-page / weekly-trend / etc.) — each guarded by a per-sweep circuit breaker |
+| **API surface** | ~30 domain routers (`services/orchestrator/routers/`) + a thin `/route` dispatcher |
+| **Tests** | 654 Python unit + ~560 integration (xdist parallel; serial-marker for global-state sweeps) + 20 ops-console vitest |
+| **CI** | GitHub Actions on every PR + push: gitleaks secret scan, ruff, unit suite, ops-console lint + vitest + Next.js build. Branch protection on `main`. |
+| **Security** | Fail-closed service auth (shared secret), HMAC-signed `X-Ops-Actor` (enforced in prod), per-operator audit log, CSP + security headers, PII log redaction, Fernet at-rest OAuth-token encryption |
 | **Deploy** | Coolify on a VPS — Dockerfile builds, Traefik + Let's Encrypt TLS, GitHub App auto-deploy on push to `main` |
 
 ---
@@ -57,8 +59,9 @@ services live in production._
 - **Weekly trend** push (`weekly_trend_v1`, idempotent dedupe per patient)
 - **Asthma** pack: rescue-inhaler puff counting + rolling-7d poor-control detector (≥8 puffs OR ≥3 days) → idempotent `asthma_control` ticket; trigger diary
 - **Pregnancy** pack: LMP/EDD intake, Naegele gestational-week math, 17-entry ANC milestone schedule, weekly check-ins (`pregnancy_weekly_v1`), end-pregnancy cancels pending events
+- **Postpartum** pack: end-pregnancy with `birth_outcome=delivered` + delivery date auto-transitions to a 12-week postpartum phase; EPDS-anchored milestone schedule (early visit, day 6-8 visit, EPDS mental-health screens at D14 + 6wk, 6-week visit + contraception counsel, 8-week baby vaccines, 12-week close) + weekly check-ins (`postpartum_check_v1`); non-delivered outcomes skip the cadence
 - **Post-op antibiotics**: strict timed reminders + day-N checklist (`post_op_check_v1`); wound-photo → `wound_review` ops ticket
-- **Senior care**: household model + caregiver mode + simplified action set
+- **Senior care**: household model + caregiver mode + simplified action set; **caregiver dose-reminder fan-out** (opt-in `notify_on_dose_reminder` + `CAREGIVER_DOSE_FANOUT_ENABLED` gate) — caregivers receive parallel dose reminders + can mark Taken/Skipped on behalf of the patient (attributed in `confirmation_metadata`)
 
 ### Voice notes
 - Inbound `[voice-note]` marker → **faster-whisper** local CPU/int8 transcription (optional `voice` extra; graceful fallback if absent)
@@ -74,7 +77,9 @@ services live in production._
 ### Privacy (compliance)
 - **Right-to-erasure** (GDPR Art. 17 / India DPDP §13): scrubs PII across **17 linked tables** (patient, caregivers, message_log, inbound classifications, clinical alerts, visit briefs, broadcast snapshots, metric obs, care-plan goals, pregnancies, orders, post-op, asthma triggers, households, appointment recaps, lab followups, prescriptions)
 - **DSAR right-of-access export**: single JSON document of patient data (regimens, adherence, labs, recaps, cohort tags, exemptions, side-effect reports, etc.) + audit row
-- Operator attribution via `X-Ops-Actor` header (out of URL/access logs)
+- **HMAC-signed operator attribution**: `X-Ops-Actor` header carries an HMAC-SHA256 signature (`X-Ops-Actor-Signature`); orchestrator verifies it on all 7 privileged endpoints. Enforced in prod (`OPS_ACTOR_SIGNATURE_REQUIRED=1`) — an API-key holder without the signing key cannot forge operator identity
+- **Per-operator audit log** (`operator_actions`): every privileged action (DSAR export, erasure, pause/unpause, ticket ack/resolve, exemption grant/revoke) writes a row keyed by `(operator_id, action, target)` with a `signed` trust flag
+- **PII log redaction**: phone numbers masked in operational logs (`redact_phone`)
 - Ops-initiated **bot pause** + consent revocation (dispatcher gate)
 
 ---
@@ -180,9 +185,10 @@ services live in production._
 - 5xx / network / 408 / 429 → bounded exponential backoff + jitter (default 5 attempts, ~5h horizon)
 - **Idempotent enqueue** primitive (ON CONFLICT on `idempotency_key`) — used by recap ack-nudge, weekly trend, all materializers
 - **Per-row SAVEPOINT isolation** in the missed-dose sweep (one bad row can't poison the pass)
+- **Per-sweep circuit breaker** (`app/circuit_breaker.py`): a sweep that crashes `SWEEP_BREAKER_THRESHOLD` (5) consecutive ticks opens its breaker for `SWEEP_BREAKER_RESET_SECONDS` (600), heartbeats `circuit_open` (surfaced by the service-health reconciler), then half-opens for a probe. Prevents a deterministically-broken sweep from spamming logs / DLQ for hours
 
-### Sweep workers (`services/scheduler/*_sweep.py`)
-`adherence_pattern_sweep`, `appointment_reminders`, `calendar_sync_sweep`, `care_gaps`, `clinical_alert_repage_sweep`, `delivery_alert_sweep`, `delivery_template_alert_sweep`, `dose_reminders`, `goal_drift_sweep`, `lab_followups`, `missed_doses`, `post_op_checklist`, `pregnancy_milestones`, `recap_sweeps`, `refill_reminders`, `service_health_reconciler`, `sla_breach_sweep`, `visit_brief_scheduling`, `weekly_trend_sweep`.
+### Sweep workers (`services/scheduler/*`)
+`adherence_pattern_sweep`, `appointment_reminders`, `calendar_sync_sweep`, `care_gaps`, `clinical_alert_repage_sweep`, `delivery_alert_sweep`, `delivery_template_alert_sweep`, `dose_reminders`, `goal_drift_sweep`, `lab_followups`, `missed_doses`, `post_op_checklist`, `postpartum_milestones`, `pregnancy_milestones`, `recap_sweeps`, `refill_reminders`, `service_health_reconciler`, `sla_breach_sweep`, `visit_brief_scheduling`, `weekly_trend_sweep`.
 
 ### WhatsApp gateway
 - **Meta send retry/backoff** in `_post_to_meta` for transient failures (3 attempts, jittered exponential)
@@ -193,28 +199,37 @@ services live in production._
 ### Auth & security
 - **Fail-closed startup** on orchestrator + gateway: refuse to boot without `ORCHESTRATOR_API_KEY` / `GATEWAY_API_KEY` unless `ALLOW_UNAUTHENTICATED=1` (dev/test opt-in)
 - Shared-secret middleware (`X-API-Key` or `Authorization: Bearer`) on every endpoint except `/health` (exact) and `/webhooks/` (prefix; Meta verify-token guarded inside the handler)
+- **HMAC-signed operator identity** (`app/operator_signature.py`): the ops console signs `X-Ops-Actor` with `OPS_ACTOR_SIGNING_KEY`; the orchestrator's `resolve_actor` verifies it on all 7 privileged endpoints. `OPS_ACTOR_SIGNATURE_REQUIRED=1` (set in prod) → 401 on unsigned / mis-signed. Two-stage rollout (observe → enforce) is complete
+- **Per-operator audit** (`operator_actions` table) — durable, queryable by `(operator_id, logged_at)` and `(target_type, target_id)`
+- **WhatsApp webhook signature verification** — `X-Hub-Signature-256` HMAC checked against `WHATSAPP_APP_SECRET` before any processing (ops-console webhook)
+- **CSP + security headers** (ops_console `next.config.ts`): Content-Security-Policy, HSTS, X-Frame-Options DENY, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
 - ops_console **`server-only` boundary** on `backend.ts` (Client Components route through Server Actions; build fails if a client component imports the secret-reading module)
 - ops_console `call()` has a 30s `AbortSignal.timeout` + guarded JSON parsing
-- DSAR export operator attribution via `X-Ops-Actor` header (kept out of URLs / access logs)
+- **PII log redaction** (`app/logging_redact.py`) — phone numbers masked to last-4 in logs
 - Fernet at-rest encryption for OAuth refresh tokens
+- **Secret scanning** (gitleaks) + pre-commit hooks block `.env`-style leaks
 
 ### Data
-- Postgres (Supabase) — single shared DB; Alembic chain at head **`0046`**
-- Composite index `ops_tickets(patient_id, category, status)` for hot escalation lookups
-- `processed_inbound_messages` dedupe ledger
+- Postgres (Supabase) — single shared DB; Alembic chain at head **`0050`**
+- Composite indexes: `ops_tickets(patient_id, category, status)`, `clinical_alerts(patient_id, status)`, `metric_observations(goal_id, observed_at DESC)` for hot lookups
+- `processed_inbound_messages` dedupe ledger; `operator_actions` audit log
+- DB pool `10 + 10` per process (under Supabase's 30-conn cap)
+- Patient-by-phone lookups memoized per session (collapses the 4-7 duplicate fetches per inbound to 1)
 - Right-of-erasure spans 17 PII-bearing tables (incl. AppointmentRecap / LabFollowup / Prescription closed by the latest pass)
 - Every workflow decision writes an audit row (`audit_records`) with reason codes + actor
 
 ### LLM
 - OpenAI client gated by `LLM_ENABLED` + `OPENAI_API_KEY`; configurable model + timeout
 - Per-call cost + latency logging in `llm_call_logs` (attributed to patient + message_id via contextvar)
+- **Circuit breaker** — `LLM_BREAKER_THRESHOLD` (5) consecutive failures open the breaker for `LLM_BREAKER_RESET_SECONDS` (120); `_get_client()` returns `None` while open so every caller falls back to the deterministic path instead of paying the timeout
 - Surfaced as the LLM analytics dashboard
 
 ### Test harness
-- 600 unit (1.3s) + 538 integration (~9m) — both fully green
+- 654 Python unit + ~560 integration — both fully green; 20 ops-console vitest
 - `pytest-xdist` parallel runs (`pytest -n auto --dist loadgroup`); `@pytest.mark.serial` for global-state sweeps
-- `conftest` defaults: `WHATSAPP_DRY_RUN=1`, `LLM_ENABLED=0`, `LANGGRAPH_ENABLED=0`, `ALLOW_UNAUTHENTICATED=1`, prod API keys popped
+- `conftest` defaults: `WHATSAPP_DRY_RUN=1`, `LLM_ENABLED=0`, `LANGGRAPH_ENABLED=0`, `ALLOW_UNAUTHENTICATED=1`, prod API keys cleared
 - `MEDAGENT_TEST_CLEANUP=1` clears accumulated shared-DB test rows between runs
+- **CI** (`.github/workflows/ci.yml`): gitleaks + ruff + unit suite + ops-console lint/vitest/build on every PR + push
 
 ---
 
@@ -227,6 +242,7 @@ services live in production._
   - Gateway + scheduler → internal sslip URLs (server-to-server only)
 - Traefik + Let's Encrypt TLS, GitHub App auto-deploys on push to `main`
 - WhatsApp webhook configured at `https://app.ramkaaj.com/api/whatsapp/webhook`; Google OAuth redirect at `https://app.ramkaaj.com/api/google/oauth/callback`
+- Prod env: `OPS_ACTOR_SIGNING_KEY` + `OPS_ACTOR_SIGNATURE_REQUIRED=1` set on orchestrator + ops console
 
 ---
 

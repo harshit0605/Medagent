@@ -26,7 +26,55 @@ The operational backbone is complete and on `main`:
   goal tracking + drift alerting, doctor reply drafter.
 - **V3 hardening**: right-of-erasure across all PII tables, TRIAGE_ENABLED
   flag, test-infra pool/cleanup/loop fixes.
-- **Tooling**: graphify knowledge graph (`graphify-out/`).
+- **V4 production-safety + reliability** (Strands A/B, May 2026):
+  CI test gate (gitleaks + ruff + pytest + ops-console build/vitest), CSP +
+  security headers, PII log redaction, patient-by-phone session cache, DB
+  pool bump + hot indexes (0047), **postpartum timeline pack** (0048),
+  **caregiver dose fan-out** + on-behalf attribution (0049), **LLM + per-sweep
+  circuit breakers**, **operator_actions audit log** (0050), and
+  **HMAC-signed `X-Ops-Actor`** verified across all 7 privileged endpoints
+  (`OPS_ACTOR_SIGNATURE_REQUIRED=1` enforced in prod).
+- **Tooling**: graphify knowledge graph (`graphify-out/`); ops-console vitest.
+
+---
+
+## Remaining backlog (V5 — goal-mode work list)
+
+_Compiled 2026-05-27 from the 6-agent audit, SoT §3 cohort gaps, and #13
+deferred items. Excludes SoT §11 non-goals (payments / ABDM / autonomous
+diagnosis). Worked in priority order; each lands as its own commit._
+
+**Security**: A2 broader PII-log scan · A4 two-person erasure rule ·
+A5 DSAR export rate-limit + alert · A1 Fernet `MultiFernet` rotation ·
+A6 secrets-rotation runbook · A7 pharmacy-adapter URL allowlist.
+
+**Reliability/Perf**: B1 per-patient delivery reconciliation sweep ·
+B2 liveness/readiness `/health` split · B3 bulk-insert materializers ·
+C1 three secondary hot indexes · C2 LLM per-patient/day token budget ·
+C3 pg_stat_statements query-plan audit.
+
+**Dev infra**: D1 mypy/pyright + CI · D2 broader ops-console tests ·
+H1 Rx OCR e2e integration test.
+
+**SoT cohort packs (Strand C)**: E1 insulin / sliding-scale dose model ·
+E2 pharmacist role · E3 HTN caregiver streak alert · E4 asthma puff-based
+refill estimation · E5 conversational NL pregnancy/regimen intake ·
+E6 data-aware `pregnancy_checklist` reply.
+
+**Patient conversational depth (G)**: self-service reminder reschedule ·
+symptom check-in flows · patient-initiated appointment request ·
+vaccination reminders · educational microcontent · monthly spend snapshot.
+
+**Doctor/operator UX (F)**: mobile/PWA shell · inbox voice/photo render ·
+full-text patient search · bulk patient actions · inbox SLA timer + snooze ·
+per-template LLM quality monitor.
+
+**Net-new adjacencies (I)**: multi-tenant `clinic_id` · SMS fallback for
+critical escalation · multi-language template pack · adherence-summary PDF ·
+lab partner ingestion · telehealth video-link send-out.
+
+**Ops (non-code)**: J1 submit `caregiver_dose_reminder_v1` Meta template,
+then flip `CAREGIVER_DOSE_FANOUT_ENABLED=1` · J2 Coolify CI-status deploy gate.
 
 ---
 
@@ -152,6 +200,24 @@ Now activated end-to-end.
 ---
 
 ## Progress log
+- 2026-05-27 — **V4 Strands A/B + follow-ups: DONE.** Production-safety + SoT
+  delivery sprint. Strand A (reversible, no behaviour risk): GitHub Actions CI
+  gate (gitleaks + ruff + pytest + ops-console build/vitest) + branch
+  protection; CSP + security headers on the ops console; `redact_phone` PII log
+  redactor; per-session `get_by_phone` cache; DB pool 5/5→10/10 + Alembic 0047
+  (`clinical_alerts(patient_id,status)`, `metric_observations(goal_id,
+  observed_at DESC)`). Strand B (product): **postpartum timeline pack**
+  (Alembic 0048, EPDS-anchored 12-week schedule, dispatcher + endpoints);
+  **caregiver dose fan-out** + on-behalf attribution (Alembic 0049, opt-in +
+  `CAREGIVER_DOSE_FANOUT_ENABLED` gate); **LLM + per-sweep circuit breakers**
+  (`app/circuit_breaker.py`); **operator_actions audit log** (Alembic 0050)
+  wired into all privileged endpoints. Follow-ups: **HMAC-signed `X-Ops-Actor`**
+  (`app/operator_signature.py` + ops-console `operator-signature.ts`), verified
+  across all 7 privileged endpoints, two-stage prod rollout complete
+  (`OPS_ACTOR_SIGNATURE_REQUIRED=1` enforced); exemption grant/revoke audit;
+  ops-console vitest runner. Migrations 0046→0050 applied to remote DB. 654
+  unit + ~560 integration + 20 vitest green. **Next: V5 remaining backlog (see
+  top of doc) — security tighten, reliability/perf, SoT cohort packs.**
 - 2026-05-23 — **P6 partner / refill execute layer: DONE.** Activated the dead
   `Order` schema. Migration 0040 drops the empty 0001 `orders` table + its
   `order_status` PG enum and recreates it with the execute-layer shape (String
