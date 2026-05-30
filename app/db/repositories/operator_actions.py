@@ -57,6 +57,32 @@ async def record(
     return row
 
 
+async def count_recent_actions(
+    session: AsyncSession,
+    *,
+    operator_id: str,
+    action: str,
+    since,
+) -> int:
+    """How many ``action`` rows this operator has logged since ``since``.
+
+    Powers the DSAR-export rate limit: a single operator scraping the patient
+    DB via repeated exports (e.g. with a leaked API key + signing key) trips a
+    per-operator/day ceiling. Counts against the durable audit log, so it
+    survives restarts and is consistent across replicas (unlike an in-memory
+    rate limiter)."""
+    from sqlalchemy import func
+
+    stmt = (
+        select(func.count())
+        .select_from(OperatorAction)
+        .where(OperatorAction.operator_id == operator_id)
+        .where(OperatorAction.action == action)
+        .where(OperatorAction.logged_at >= since)
+    )
+    return (await session.execute(stmt)).scalar_one() or 0
+
+
 async def list_for_operator(
     session: AsyncSession,
     operator_id: str,

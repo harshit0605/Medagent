@@ -19,6 +19,7 @@ though it physically sat between these endpoints before extraction.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -50,6 +51,47 @@ from services.orchestrator.routers._dtos import (
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _dsar_export_daily_limit() -> int:
+    """Max DSAR exports a single operator may run per rolling 24h. 0 disables
+    the limit. Default 20 — generous for legitimate per-patient access while
+    capping a scraping run."""
+    try:
+        return int(os.getenv("DSAR_EXPORT_DAILY_LIMIT", "20"))
+    except ValueError:
+        return 20
+
+
+async def _alert_dsar_export_abuse(
+    db: AsyncSession, *, operator_id: str, count: int, limit: int
+) -> None:
+    """Open an idempotent ops ticket when an operator trips the DSAR rate
+    limit — abnormal export volume is a possible key-compromise signal."""
+    try:
+        from app.db.repositories import ops_tickets as ops_tickets_repo
+
+        patient_key = f"platform:dsar:{operator_id}"[:128]
+        existing = await ops_tickets_repo.find_open_for_patient_category(
+            db, patient_id=patient_key, category="dsar_export_abuse"
+        )
+        if existing is not None:
+            return
+        await ops_tickets_repo.create(
+            db,
+            patient_id=patient_key,
+            category="dsar_export_abuse",
+            priority="high",
+            sla_minutes=120,
+            notes=(
+                f"Operator {operator_id!r} hit the DSAR export rate limit "
+                f"({count} exports in 24h, limit {limit}). Possible compromised "
+                f"credentials or an un-sanctioned bulk export. Investigate + "
+                f"rotate the operator's access if unexpected."
+            ),
+        )
+    except Exception:  # noqa: BLE001 — alerting must not break the 429 path
+        log.exception("failed to open DSAR-abuse alert for %s", operator_id)
 
 
 # ---- Patient list + detail endpoints (powers the ops console) ---------------
@@ -821,6 +863,37 @@ async def export_patient_data(
             status_code=400, detail="actor required (max 128 chars)"
         )
 
+    # Rate-limit DSAR exports per operator per rolling 24h. A leaked API key
+    # (+ signing key) could otherwise scrape the whole patient DB one export
+    # at a time; the ceiling caps the blast radius. Counted against the
+    # durable operator_actions log so it's consistent across replicas and
+    # survives restarts. Over the limit → 429 + an idempotent ops alert.
+    from app.db.repositories import operator_actions as ops_audit
+
+    limit = _dsar_export_daily_limit()
+    if limit > 0:
+        since = datetime.now(timezone.utc) - timedelta(hours=24)
+        recent = await ops_audit.count_recent_actions(
+            db,
+            operator_id=resolved_actor,
+            action=ops_audit.ACTION_PATIENT_EXPORT,
+            since=since,
+        )
+        if recent >= limit:
+            await _alert_dsar_export_abuse(
+                db, operator_id=resolved_actor, count=recent, limit=limit
+            )
+            await db.commit()
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"DSAR export rate limit reached "
+                    f"({recent} exports in the last 24h, limit {limit}). "
+                    "Contact the data-protection officer if a bulk export is "
+                    "genuinely required."
+                ),
+            )
+
     document = await patient_export.build_patient_export(
         db,
         patient_id=patient_id,
@@ -830,8 +903,6 @@ async def export_patient_data(
     if document is None:
         raise HTTPException(status_code=404, detail="patient not found")
     try:
-        from app.db.repositories import operator_actions as ops_audit
-
         await ops_audit.record(
             db,
             operator_id=resolved_actor,
