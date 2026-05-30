@@ -1610,6 +1610,14 @@ class WhatsAppMessageStatus(Base):
     __table_args__ = (
         Index("ix_whatsapp_status_recipient", "recipient_id"),
         Index("ix_whatsapp_status_updated_at", "updated_at"),
+        # Partial index serving the delivery-reconciliation sweep's
+        # failed-per-recipient grouped scan (migration 0051).
+        Index(
+            "ix_whatsapp_status_failed_recipient",
+            "recipient_id",
+            "updated_at",
+            postgresql_where=text("status = 'failed'"),
+        ),
     )
 
     wamid: Mapped[str] = mapped_column(String(255), primary_key=True)

@@ -21,6 +21,7 @@ from services.scheduler import (
     care_gaps,
     clinical_alert_repage_sweep,
     delivery_alert_sweep,
+    delivery_reconcile_sweep,
     delivery_template_alert_sweep,
     dose_reminders,
     goal_drift_sweep,
@@ -115,6 +116,16 @@ def _delivery_alert_sweep_seconds() -> float:
         return float(os.getenv("DELIVERY_ALERT_SWEEP_SECONDS", "600"))
     except ValueError:
         return 600.0
+
+
+def _delivery_reconcile_sweep_seconds() -> float:
+    """How often the per-patient delivery reconciliation sweep runs. 1h
+    default — an unreachable patient is detected against a multi-day window,
+    so checking hourly is plenty and keeps the grouped status scan cheap."""
+    try:
+        return float(os.getenv("DELIVERY_RECONCILE_SWEEP_SECONDS", "3600"))
+    except ValueError:
+        return 3600.0
 
 
 def _delivery_template_alert_sweep_seconds() -> float:
@@ -380,6 +391,17 @@ async def _run_delivery_alert_sweep_once() -> dict[str, Any]:
     SessionLocal = get_sessionmaker()
     async with SessionLocal() as db:
         out = await delivery_alert_sweep.sweep_delivery_alerts(db)
+        await db.commit()
+    return out
+
+
+async def _run_delivery_reconcile_sweep_once() -> dict[str, Any]:
+    """One pass: open ``patient_unreachable`` tickets for silent patients
+    (persistent per-patient delivery failures) and auto-resolve ones who
+    are reachable again."""
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        out = await delivery_reconcile_sweep.sweep_unreachable_patients(db)
         await db.commit()
     return out
 
@@ -784,6 +806,46 @@ async def _delivery_alert_sweep_loop(
     log.info("delivery alert sweep loop stopped")
 
 
+async def _delivery_reconcile_sweep_loop(
+    stop_event: asyncio.Event, interval: float
+) -> None:
+    log.info(
+        "delivery reconcile sweep loop started (interval=%ss)", interval
+    )
+    while not stop_event.is_set():
+        breaker = _sweep_breaker("scheduler.delivery_reconcile_sweep")
+        if breaker.is_open():
+            await _record_heartbeat(
+                "scheduler.delivery_reconcile_sweep",
+                outcome="circuit_open",
+                details={"breaker": breaker.snapshot()},
+            )
+        else:
+            try:
+                result = await _run_delivery_reconcile_sweep_once()
+                if result.get("opened") or result.get("auto_resolved"):
+                    log.warning(
+                        "delivery reconcile sweep state change: %s", result
+                    )
+                await _record_heartbeat(
+                    "scheduler.delivery_reconcile_sweep",
+                    outcome="ok",
+                    details=_heartbeat_details_safe(result),
+                )
+                breaker.record_success()
+            except Exception:  # noqa: BLE001 — keep loop alive
+                log.exception("delivery reconcile sweep raised; continuing")
+                await _record_heartbeat(
+                    "scheduler.delivery_reconcile_sweep", outcome="error"
+                )
+                breaker.record_failure()
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            pass
+    log.info("delivery reconcile sweep loop stopped")
+
+
 async def _delivery_template_alert_sweep_loop(
     stop_event: asyncio.Event, interval: float
 ) -> None:
@@ -1055,6 +1117,7 @@ async def lifespan(app: FastAPI):
     health_reconcile_task: asyncio.Task[None] | None = None
     sla_breach_task: asyncio.Task[None] | None = None
     delivery_alert_task: asyncio.Task[None] | None = None
+    delivery_reconcile_task: asyncio.Task[None] | None = None
     delivery_template_alert_task: asyncio.Task[None] | None = None
     adherence_pattern_task: asyncio.Task[None] | None = None
     calendar_sync_task: asyncio.Task[None] | None = None
@@ -1088,6 +1151,11 @@ async def lifespan(app: FastAPI):
         delivery_alert_task = asyncio.create_task(
             _delivery_alert_sweep_loop(
                 stop_event, _delivery_alert_sweep_seconds()
+            )
+        )
+        delivery_reconcile_task = asyncio.create_task(
+            _delivery_reconcile_sweep_loop(
+                stop_event, _delivery_reconcile_sweep_seconds()
             )
         )
         delivery_template_alert_task = asyncio.create_task(
@@ -1138,6 +1206,7 @@ async def lifespan(app: FastAPI):
     app.state.health_reconcile_task = health_reconcile_task
     app.state.sla_breach_task = sla_breach_task
     app.state.delivery_alert_task = delivery_alert_task
+    app.state.delivery_reconcile_task = delivery_reconcile_task
     app.state.delivery_template_alert_task = delivery_template_alert_task
     app.state.adherence_pattern_task = adherence_pattern_task
     app.state.calendar_sync_task = calendar_sync_task
@@ -1157,6 +1226,7 @@ async def lifespan(app: FastAPI):
             health_reconcile_task,
             sla_breach_task,
             delivery_alert_task,
+            delivery_reconcile_task,
             delivery_template_alert_task,
             adherence_pattern_task,
             calendar_sync_task,

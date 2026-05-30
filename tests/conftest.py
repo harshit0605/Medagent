@@ -302,6 +302,7 @@ _SERIAL_MODULES: frozenset[str] = frozenset(
         "test_service_health_reconciler",
         "test_weekly_trend",
         "test_clinical_alert_pager",  # the re-page sweep scans all unacked alerts
+        "test_delivery_reconcile_sweep",  # scans whole-table status aggregates
     }
 )
 

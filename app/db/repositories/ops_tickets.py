@@ -304,6 +304,25 @@ async def find_open_for_patient_category(
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def list_open_for_category(
+    session: AsyncSession, *, category: str
+) -> list[OpsTicket]:
+    """All open/acknowledged tickets in a category. Used by reconciling
+    sweeps (e.g. delivery_reconcile) that auto-resolve a whole category's
+    worth of tickets once their underlying condition clears."""
+    stmt = (
+        select(OpsTicket)
+        .where(OpsTicket.category == category)
+        .where(
+            OpsTicket.status.in_(
+                [OpsTicketStatus.open, OpsTicketStatus.acknowledged]
+            )
+        )
+        .order_by(desc(OpsTicket.created_at))
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
 async def acknowledge(
     session: AsyncSession,
     ticket_id: int,
