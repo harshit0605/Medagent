@@ -1244,6 +1244,12 @@ async def _build_appointment_reminder(
     body = (
         f"Reminder: you have an appointment with {doctor_name} {when_phrase}."
     )
+    # Telehealth (I6): if the appointment has a video link, surface it so the
+    # patient can join straight from the reminder. Only added to the freeform
+    # (in-CSW) body — the template path's params are fixed.
+    video_link = getattr(appointment, "video_link", None)
+    if video_link:
+        body += f"\nJoin here: {video_link}"
 
     # Same buttons regardless of send mode — only the wire envelope differs:
     #   in-CSW  → freeform interactive button message (label visible to user

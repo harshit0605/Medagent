@@ -1401,6 +1401,9 @@ class Appointment(TimestampMixin, Base):
     )
     calendar_event_id: Mapped[str | None] = mapped_column(String(255))
     calendar_html_link: Mapped[str | None] = mapped_column(Text)
+    # Telehealth video-consult link (Zoom / Meet / Jitsi). NULL = in-person.
+    # When set, the appointment reminder includes a "Join here" line (I6).
+    video_link: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str] = mapped_column(
         String(64), nullable=False, default="whatsapp_booking_agent"
     )

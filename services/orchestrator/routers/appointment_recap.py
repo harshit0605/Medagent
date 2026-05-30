@@ -213,6 +213,27 @@ async def upsert_appointment_recap(
     return _recap_to_dto(updated)
 
 
+class VideoLinkRequest(BaseModel):
+    video_link: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/appointments/{appointment_id}/video-link")
+async def set_appointment_video_link(
+    appointment_id: int,
+    payload: VideoLinkRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Set / clear a telehealth video link on an appointment (I6). When set,
+    the appointment reminder includes a 'Join here' line."""
+    row = await appointments_repo.set_video_link(
+        db, appointment_id, video_link=payload.video_link
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="appointment not found")
+    await db.commit()
+    return {"appointment_id": row.id, "video_link": row.video_link}
+
+
 @router.get(
     "/appointments/{appointment_id}/recap", response_model=RecapDTO | None
 )

@@ -65,6 +65,20 @@ async def get(session: AsyncSession, appointment_id: int) -> Appointment | None:
     return await session.get(Appointment, appointment_id)
 
 
+async def set_video_link(
+    session: AsyncSession, appointment_id: int, *, video_link: str | None
+) -> Appointment | None:
+    """Set / clear the telehealth video link (I6). The reminder includes a
+    'Join here' line when this is set."""
+    row = await session.get(Appointment, appointment_id)
+    if row is None:
+        return None
+    row.video_link = (video_link or "").strip() or None
+    await session.flush()
+    await session.refresh(row)
+    return row
+
+
 async def mark_cancelled(
     session: AsyncSession, appointment_id: int
 ) -> Appointment | None:
