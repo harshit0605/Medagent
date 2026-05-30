@@ -19,15 +19,19 @@ Escalation threshold default: 3 consecutive misses on the same regimen.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AdherenceStatus, OpsTicket
 from app.db.repositories import adherence_events as adherence_events_repo
+from app.db.repositories import caregivers as caregivers_repo
 from app.db.repositories import ops_tickets as ops_tickets_repo
 from app.db.repositories import patients as patients_repo
 from app.db.repositories import regimens as regimens_repo
+from app.db.repositories import scheduled_events as scheduled_events_repo
+from app.logging_redact import redact_phone
 
 log = logging.getLogger(__name__)
 
@@ -180,7 +184,64 @@ async def _open_ticket_for_regimen(
     log.info(
         "missed-dose escalation: opened ticket %s for patient %s (regimen %s)",
         ticket.id,
-        patient.phone,
+        redact_phone(patient.phone),
         regimen_id,
     )
+
+    # SoT §3B — cardiac (hypertension) patients: a missed-med streak is a
+    # caregiver-alert trigger. Notify every confirmed active caregiver so a
+    # family member can step in. Best-effort; never blocks the ops ticket.
+    if _htn_caregiver_alert_enabled() and getattr(
+        patient, "cohort_cardiac", False
+    ):
+        try:
+            await _alert_caregivers_of_streak(db, patient, regimen)
+        except Exception:  # noqa: BLE001
+            log.exception(
+                "HTN caregiver alert enqueue failed for regimen %s", regimen_id
+            )
     return ticket
+
+
+def _htn_caregiver_alert_enabled() -> bool:
+    return os.getenv("HTN_CAREGIVER_ALERT_ENABLED", "1") == "1"
+
+
+async def _alert_caregivers_of_streak(db: AsyncSession, patient, regimen) -> int:
+    """Enqueue a ``caregiver_missed_streak`` event per confirmed caregiver.
+    The dispatcher renders each into a ``caregiver_missed_streak_v1`` template
+    send (caregivers are always out-of-CSW from their own number). Idempotent
+    via a per-(patient, regimen, day) idempotency key so the every-tick sweep
+    doesn't re-alert the same streak repeatedly."""
+    caregivers = await caregivers_repo.list_active_confirmed(db, patient.id)
+    if not caregivers:
+        return 0
+    patient_name = (patient.full_name or "your family member").split(" ")[0]
+    med = regimen.medication_name
+    day_key = datetime.now(timezone.utc).strftime("%Y%m%d")
+    specs = [
+        {
+            "event_type": "caregiver_missed_streak",
+            "patient_id": cg.phone,
+            "payload": {
+                "caregiver_name": (cg.full_name or "").split(" ")[0],
+                "patient_name": patient_name,
+                "medication_name": med,
+                "patient_db_id": patient.id,
+            },
+            "idempotency_key": (
+                f"cg_streak:{patient.id}:{regimen.id}:{cg.id}:{day_key}"
+            ),
+            "scheduled_for": datetime.now(timezone.utc),
+        }
+        for cg in caregivers
+    ]
+    inserted = await scheduled_events_repo.bulk_enqueue_idempotent(db, specs)
+    if inserted:
+        log.info(
+            "HTN caregiver alert: enqueued %d caregiver notice(s) for "
+            "patient %s",
+            len(inserted),
+            redact_phone(patient.phone),
+        )
+    return len(inserted)

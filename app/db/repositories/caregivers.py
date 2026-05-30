@@ -79,6 +79,23 @@ async def list_active_dose_recipients(
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def list_active_confirmed(
+    session: AsyncSession, patient_id: int
+) -> list[Caregiver]:
+    """All active + confirmed-consent caregivers for a patient, regardless of
+    per-channel notify flags. Used for HIGH-signal alerts (e.g. a missed-dose
+    streak on a cardiac patient — SoT §3B) where any consented caregiver should
+    be told, not just those opted into routine dose/recap fan-out."""
+    stmt = (
+        select(Caregiver)
+        .where(Caregiver.patient_id == patient_id)
+        .where(Caregiver.active.is_(True))
+        .where(Caregiver.consent_status == CONSENT_CONFIRMED)
+        .order_by(asc(Caregiver.full_name))
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
 async def find_active_confirmed_by_phone(
     session: AsyncSession,
     *,

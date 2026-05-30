@@ -68,6 +68,9 @@ _SUBSTITUTION_EVENT_TYPES: frozenset[str] = frozenset(
 _ORDER_RECEIPT_EVENT_TYPES: frozenset[str] = frozenset({"order_receipt"})
 _WEEKLY_TREND_EVENT_TYPES: frozenset[str] = frozenset({"weekly_trend_push"})
 _POST_OP_EVENT_TYPES: frozenset[str] = frozenset({"post_op_check_due"})
+_CAREGIVER_STREAK_EVENT_TYPES: frozenset[str] = frozenset(
+    {"caregiver_missed_streak"}
+)
 
 # How late a reminder can be before we drop it as stale. T-1h has a much
 # tighter window — a "1 hour before" reminder that arrives 45 minutes after
@@ -101,6 +104,9 @@ _FRESHNESS_BY_EVENT: dict[str, timedelta] = {
     "order_receipt": timedelta(hours=72),
     # A weekly trend nudge is only meaningful within its week.
     "weekly_trend_push": timedelta(hours=36),
+    # A caregiver missed-streak alert is time-sensitive but a few hours' delay
+    # still lets the caregiver intervene.
+    "caregiver_missed_streak": timedelta(hours=12),
     # Post-op checks are forgiving — a wound-check nudge a day late still helps.
     "post_op_check_due": timedelta(hours=48),
 }
@@ -135,6 +141,11 @@ _CAREGIVER_DOSE_FANOUT_ENABLED = (
 )
 _CAREGIVER_DOSE_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_CAREGIVER_DOSE_TEMPLATE_NAME", "caregiver_dose_reminder_v1"
+)
+# Caregiver missed-medication-streak alert (SoT §3B). 2 body params:
+# caregiver name (or "there"), and a "{patient} missed {med}" phrase.
+_CAREGIVER_STREAK_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_CAREGIVER_STREAK_TEMPLATE_NAME", "caregiver_missed_streak_v1"
 )
 # Approved Meta template name for outside-CSW REFILL reminders. Defaults
 # to the legacy `refill_due_v1` (single text param: medication + dose).
@@ -930,6 +941,37 @@ async def _build_postpartum_milestone_reminder(
     }
 
 
+async def _build_caregiver_missed_streak(
+    db: AsyncSession, event: ScheduledEvent
+) -> dict[str, Any]:
+    """Caregiver alert that a cardiac (HTN) patient has missed a medication
+    streak (SoT §3B). Recipient is the CAREGIVER's phone (``event.patient_id``).
+    Always a template send — a caregiver is out-of-CSW from their own number
+    (they never messaged the bot). 2 body params: caregiver name + a
+    "{patient} has missed several doses of {med}" phrase."""
+    payload = dict(event.payload or {})
+    caregiver_name = payload.get("caregiver_name") or "there"
+    patient_name = payload.get("patient_name") or "your family member"
+    med = payload.get("medication_name") or "their medication"
+    streak_phrase = (
+        f"{patient_name} has missed several recent doses of {med}"
+    )
+    body = (
+        f"Hi {caregiver_name}, a heads-up from the care team: {streak_phrase}. "
+        "Please check in with them when you can. Reply HELP to reach us."
+    )
+    return {
+        "patient_id": event.patient_id,  # the caregiver's phone
+        "body": body,
+        "use_template": True,
+        "template_name": _CAREGIVER_STREAK_TEMPLATE_NAME,
+        "template_params": {
+            "1_name": caregiver_name,
+            "2_streak": streak_phrase,
+        },
+    }
+
+
 async def _build_substitution_request(
     db: AsyncSession, event: ScheduledEvent
 ) -> dict[str, Any]:
@@ -1651,6 +1693,8 @@ async def dispatch(
                     f"post-op dispatch requires db (event {event.id})"
                 )
             message = await _build_post_op_check(db, event)
+        elif event.event_type in _CAREGIVER_STREAK_EVENT_TYPES:
+            message = await _build_caregiver_missed_streak(db, event)
         else:
             message = _build_message_out(event)
     except ReminderNotApplicable as exc:

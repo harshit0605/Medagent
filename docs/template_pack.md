@@ -27,6 +27,13 @@
 - lab_closure_update_v1
 - appointment_closure_update_v1
 
+## Caregiver alerts (V5 — SoT §3B)
+- `caregiver_missed_streak_v1` (Utility) — 2 body params: caregiver name, and a
+  "{patient} has missed several doses of {med}" phrase. Sent to a confirmed
+  caregiver when a cardiac (HTN) patient hits a missed-dose escalation streak.
+  Gated by `HTN_CAREGIVER_ALERT_ENABLED` (default on; naturally scoped to
+  cardiac-cohort patients with confirmed caregivers).
+
 ## Postpartum (V3 extension)
 - `postpartum_check_v1` (Utility) — 3 body params: name, postpartum_week, focus. Used by both the postpartum weekly check-in (`postpartum_weekly_due`) and the postpartum milestone reminders (`postpartum_milestone_due` — early visit, EPDS mental-health screen, 6-week visit + contraception counsel, 8-week baby vaccines, 12-week close). Param shape mirrors `pregnancy_weekly_v1` so a single Meta-approved template can serve both phases if needed.
 
