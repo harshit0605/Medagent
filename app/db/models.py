@@ -1897,6 +1897,31 @@ class OperatorAction(Base):
     )
 
 
+class Pharmacist(Base):
+    """Pharmacy-partner operator (MVP #5, migration 0054).
+
+    A lightweight registry so refill-help / order-substitution ops tickets can
+    be routed to a named pharmacist via ``ops_tickets.assigned_to``. No auth
+    here — pharmacists act through the ops console under the shared
+    operator-identity model.
+    """
+
+    __tablename__ = "pharmacists"
+    __table_args__ = (Index("ix_pharmacists_active", "active"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(32))
+    email: Mapped[str | None] = mapped_column(String(255))
+    pharmacy_name: Mapped[str | None] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ErasureRequest(Base):
     """Dual-control approval record for patient erasure (migration 0052).
 

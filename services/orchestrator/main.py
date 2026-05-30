@@ -50,6 +50,7 @@ from services.orchestrator.routers import ops_analytics as ops_analytics_router
 from services.orchestrator.routers import ops_health as ops_health_router
 from services.orchestrator.routers import ops_tickets as ops_tickets_router
 from services.orchestrator.routers import orders as orders_router
+from services.orchestrator.routers import pharmacists as pharmacists_router
 from services.orchestrator.routers import post_op as post_op_router
 from services.orchestrator.routers import patients as patients_router
 from services.orchestrator.routers import pregnancy as pregnancy_router
@@ -263,6 +264,7 @@ app.include_router(ops_analytics_router.router)
 app.include_router(ops_tickets_router.router)
 app.include_router(appointment_recap_router.router)
 app.include_router(doctors_router.router)
+app.include_router(pharmacists_router.router)
 app.include_router(pre_visit_router.router)
 app.include_router(patients_router.router)
 
