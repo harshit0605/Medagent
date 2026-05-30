@@ -1892,6 +1892,36 @@ class OperatorAction(Base):
     )
 
 
+class ErasureRequest(Base):
+    """Dual-control approval record for patient erasure (migration 0052).
+
+    Backs the optional two-person rule (``ERASURE_DUAL_CONTROL``): one operator
+    files a request, a DIFFERENT operator approves it, and the approval
+    executes the irreversible scrub. A partial unique index enforces at most
+    one ``pending`` request per patient.
+    """
+
+    __tablename__ = "erasure_requests"
+    __table_args__ = (
+        Index("ix_erasure_requests_status", "status", "requested_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    approved_by: Mapped[str | None] = mapped_column(String(128))
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ProcessedInboundMessage(Base):
     """Inbound-message dedupe ledger.
 

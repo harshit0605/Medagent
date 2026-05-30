@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,6 +93,61 @@ async def _alert_dsar_export_abuse(
         )
     except Exception:  # noqa: BLE001 — alerting must not break the 429 path
         log.exception("failed to open DSAR-abuse alert for %s", operator_id)
+
+
+def _erasure_dual_control() -> bool:
+    """Whether erasure requires a second operator's approval (4-eyes).
+    Default off so single-step erasure keeps working until a deployment
+    opts in by setting ``ERASURE_DUAL_CONTROL=1``."""
+    return os.getenv("ERASURE_DUAL_CONTROL", "0") == "1"
+
+
+async def _execute_erasure(
+    db: AsyncSession,
+    *,
+    patient_id: int,
+    actor: str,
+    reason: str,
+    signed: bool,
+    approved_by: str | None = None,
+) -> dict[str, Any] | None:
+    """Run the irreversible scrub + write the operator-action audit row.
+    Returns the response dict, or None when the patient doesn't exist.
+    Shared by the direct-erase path and the dual-control approve path."""
+    from services.orchestrator import patient_erasure
+    from app.db.repositories import operator_actions as ops_audit
+
+    patient = await patient_erasure.erase_patient_data(
+        db, patient_id=patient_id, actor=actor, reason=reason
+    )
+    if patient is None:
+        return None
+    try:
+        details: dict[str, Any] = {
+            "reason": reason,
+            "anonymized_phone": patient.phone,
+            "signed": signed,
+        }
+        if approved_by is not None:
+            details["approved_by"] = approved_by
+            details["dual_control"] = True
+        await ops_audit.record(
+            db,
+            operator_id=actor,
+            action=ops_audit.ACTION_PATIENT_ERASURE,
+            target_type="patient",
+            target_id=patient_id,
+            details=details,
+        )
+    except Exception:  # noqa: BLE001 — never block an erasure on audit
+        log.exception("operator audit failed for patient_erasure %s", patient_id)
+    return {
+        "patient_id": patient.id,
+        "erased_at": patient.erased_at.isoformat()
+        if patient.erased_at
+        else None,
+        "anonymized_phone": patient.phone,
+    }
 
 
 # ---- Patient list + detail endpoints (powers the ops console) ---------------
@@ -743,8 +799,12 @@ async def erase_patient_endpoint(
     Operator identity: resolved via :func:`resolve_actor` — under
     ``OPS_ACTOR_SIGNATURE_REQUIRED=1`` an unsigned / mis-signed
     ``X-Ops-Actor`` returns 401 before any DB mutation.
+
+    Dual control: when ``ERASURE_DUAL_CONTROL=1`` this endpoint does NOT
+    execute the scrub — it files a pending ``erasure_request`` (HTTP 202) that
+    a DIFFERENT operator must approve via
+    ``POST /erasure-requests/{id}/approve``. Default off → single-step erasure.
     """
-    from services.orchestrator import patient_erasure
     from app.operator_signature import resolve_actor
 
     if not payload.confirm:
@@ -765,40 +825,162 @@ async def erase_patient_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
 
-    patient = await patient_erasure.erase_patient_data(
+    patient = await patients_repo.get(db, patient_id)
+    if patient is None:
+        raise HTTPException(status_code=404, detail="patient not found")
+
+    # Dual-control: file a request for a second operator instead of executing.
+    if _erasure_dual_control() and patient.erased_at is None:
+        from app.db.repositories import erasure_requests as er_repo
+
+        existing = await er_repo.get_pending_for_patient(db, patient_id)
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"an erasure request for this patient is already pending "
+                    f"(id={existing.id}); a different operator must approve it"
+                ),
+            )
+        req = await er_repo.create(
+            db,
+            patient_id=patient_id,
+            requested_by=actor,
+            reason=payload.reason,
+        )
+        await db.commit()
+        return JSONResponse(
+            status_code=202,
+            content={
+                "erasure_request_id": req.id,
+                "status": "pending_approval",
+                "requested_by": actor,
+                "detail": (
+                    "Erasure requires a second operator's approval. "
+                    f"Approve via POST /erasure-requests/{req.id}/approve "
+                    "(must be a different operator)."
+                ),
+            },
+        )
+
+    result = await _execute_erasure(
         db,
         patient_id=patient_id,
         actor=actor,
         reason=payload.reason,
+        signed=signed,
     )
-    if patient is None:
+    if result is None:
         raise HTTPException(status_code=404, detail="patient not found")
-    try:
-        from app.db.repositories import operator_actions as ops_audit
-
-        await ops_audit.record(
-            db,
-            operator_id=actor,
-            action=ops_audit.ACTION_PATIENT_ERASURE,
-            target_type="patient",
-            target_id=patient_id,
-            details={
-                "reason": payload.reason,
-                "anonymized_phone": patient.phone,
-                "signed": signed,
-            },
-        )
-    except Exception:  # noqa: BLE001 — never block an erasure on audit
-        log.exception("operator audit failed for patient_erasure %s", patient_id)
     await db.commit()
+    return result
 
-    return {
-        "patient_id": patient.id,
-        "erased_at": patient.erased_at.isoformat()
-        if patient.erased_at
-        else None,
-        "anonymized_phone": patient.phone,
-    }
+
+class ErasureApprovalRequest(BaseModel):
+    actor: str | None = Field(default=None, max_length=128)
+
+
+@router.get("/erasure-requests")
+async def list_erasure_requests(
+    db: AsyncSession = Depends(get_session),
+) -> list[dict[str, Any]]:
+    """Pending erasure requests awaiting a second operator's approval —
+    the ops-console approval queue."""
+    from app.db.repositories import erasure_requests as er_repo
+
+    rows = await er_repo.list_pending(db)
+    return [
+        {
+            "id": r.id,
+            "patient_id": r.patient_id,
+            "requested_by": r.requested_by,
+            "reason": r.reason,
+            "requested_at": r.requested_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.post("/erasure-requests/{request_id}/approve")
+async def approve_erasure_request(
+    request_id: int,
+    payload: ErasureApprovalRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Second-operator approval that executes a pending erasure. The approver
+    MUST differ from the requester (the whole point of dual control) — a
+    self-approval returns 403."""
+    from app.db.repositories import erasure_requests as er_repo
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.actor or "ops",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
+    req = await er_repo.get(db, request_id)
+    if req is None or req.status != er_repo.STATUS_PENDING:
+        raise HTTPException(
+            status_code=404, detail="pending erasure request not found"
+        )
+    try:
+        approved = await er_repo.approve(db, request_id, approved_by=actor)
+    except er_repo.SelfApprovalError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    if approved is None:
+        raise HTTPException(
+            status_code=404, detail="pending erasure request not found"
+        )
+
+    result = await _execute_erasure(
+        db,
+        patient_id=approved.patient_id,
+        actor=approved.requested_by,
+        reason=approved.reason,
+        signed=signed,
+        approved_by=actor,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="patient not found")
+    await db.commit()
+    result["approved_by"] = actor
+    return result
+
+
+@router.post("/erasure-requests/{request_id}/reject")
+async def reject_erasure_request(
+    request_id: int,
+    payload: ErasureApprovalRequest,
+    x_ops_actor: str | None = Header(default=None),
+    x_ops_actor_signature: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Reject a pending erasure request (no scrub runs)."""
+    from app.db.repositories import erasure_requests as er_repo
+    from app.operator_signature import resolve_actor
+
+    try:
+        actor, _signed = resolve_actor(
+            header_actor=x_ops_actor,
+            header_signature=x_ops_actor_signature,
+            fallback=payload.actor or "ops",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc).split(":", 1)[-1])
+
+    rejected = await er_repo.reject(db, request_id, rejected_by=actor)
+    if rejected is None:
+        raise HTTPException(
+            status_code=404, detail="pending erasure request not found"
+        )
+    await db.commit()
+    return {"erasure_request_id": request_id, "status": "rejected"}
 
 
 @router.get("/patients/{patient_id}/export")
