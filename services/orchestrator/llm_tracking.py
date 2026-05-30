@@ -149,6 +149,27 @@ def get_llm_tracking_context() -> LlmTrackingContext:
     return _current_context.get()
 
 
+async def patient_tokens_since(
+    session: AsyncSession, *, patient_id: str, since
+) -> int:
+    """Sum of ``total_tokens`` this patient has consumed since ``since``.
+
+    Powers the per-patient LLM token budget — a runaway loop or an abusive
+    patient shouldn't be able to rack up unbounded OpenAI spend. Queried
+    against ``llm_call_logs`` (served by ``ix_llm_call_logs_patient_occurred``).
+    """
+    from sqlalchemy import func, select
+
+    from app.db.models import LlmCallLog
+
+    stmt = (
+        select(func.coalesce(func.sum(LlmCallLog.total_tokens), 0))
+        .where(LlmCallLog.patient_id == patient_id)
+        .where(LlmCallLog.occurred_at >= since)
+    )
+    return int((await session.execute(stmt)).scalar_one() or 0)
+
+
 # ---- Tracker context manager ---------------------------------------------
 
 

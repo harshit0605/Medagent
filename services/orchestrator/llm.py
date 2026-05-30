@@ -244,12 +244,55 @@ class AgentLLM:
     def _record_llm_failure(self) -> None:
         self._breaker.record_failure()
 
+    async def _budget_ok(self) -> bool:
+        """Per-patient daily LLM token budget gate. Returns True (allow) unless
+        the current patient (from the tracking contextvar) has already consumed
+        ``LLM_PATIENT_DAILY_TOKEN_BUDGET`` tokens in the last 24h. 0 disables
+        the budget. A runaway loop or abusive patient can't rack up unbounded
+        OpenAI spend; over budget falls back to the deterministic path (same
+        contract as the circuit breaker — caller sees ``None``)."""
+        try:
+            budget = int(os.getenv("LLM_PATIENT_DAILY_TOKEN_BUDGET", "0"))
+        except ValueError:
+            budget = 0
+        if budget <= 0:
+            return True
+        from services.orchestrator.llm_tracking import (
+            get_llm_tracking_context,
+            patient_tokens_since,
+        )
+
+        ctx = get_llm_tracking_context()
+        if ctx.session is None or not ctx.patient_id:
+            return True  # no patient context (platform call) → not budgeted
+        try:
+            from datetime import datetime, timedelta, timezone
+
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+            used = await patient_tokens_since(
+                ctx.session, patient_id=ctx.patient_id, since=since
+            )
+        except Exception:  # noqa: BLE001 — a budget-query failure must not
+            # block the LLM; fail open (allow the call).
+            return True
+        if used >= budget:
+            log.warning(
+                "LLM budget exceeded for patient (used=%d budget=%d) — "
+                "falling back to deterministic path",
+                used,
+                budget,
+            )
+            return False
+        return True
+
     async def classify_intent(self, text: str) -> Intent | None:
         if not self.enabled or not text:
             return None
         try:
             client = self._get_client()
             if client is None:
+                return None
+            if not await self._budget_ok():
                 return None
             from services.orchestrator.llm_tracking import track_llm_call
 
@@ -295,6 +338,8 @@ class AgentLLM:
         try:
             client = self._get_client()
             if client is None:
+                return None
+            if not await self._budget_ok():
                 return None
             from services.orchestrator.llm_tracking import track_llm_call
 
@@ -359,6 +404,8 @@ class AgentLLM:
             client = self._get_client()
             if client is None:
                 return None
+            if not await self._budget_ok():
+                return None
             user_payload = (
                 f"Rule-based floor severity: {current_severity}\n"
                 f"Detected intent: {intent}\n"
@@ -413,6 +460,8 @@ class AgentLLM:
             client = self._get_client()
             if client is None:
                 return None
+            if not await self._budget_ok():
+                return None
             from services.orchestrator.llm_tracking import track_llm_call
 
             async with track_llm_call(
@@ -466,6 +515,8 @@ class AgentLLM:
             client = self._get_client()
             if client is None:
                 return None
+            if not await self._budget_ok():
+                return None
             from services.orchestrator.llm_tracking import track_llm_call
 
             async with track_llm_call(
@@ -518,6 +569,8 @@ class AgentLLM:
 
             client = self._get_client()
             if client is None:
+                return None
+            if not await self._budget_ok():
                 return None
             language_hint = i18n.llm_hint(preferred_language)
             # When the patient's profile prefers a non-English language
