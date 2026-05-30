@@ -208,3 +208,57 @@ async def test_pregnancy_endpoints_sync_cohort_flag(orchestrator_client):
     async with SessionLocal() as db:
         patient = await patients_repo.get(db, pid)
         assert patient.cohort_pregnancy is False
+
+
+# ---- puff-based refill estimation (E4) -------------------------------------
+
+
+async def test_refill_nudge_when_estimate_low(monkeypatch):
+    """With a small canister, a single big rescue use drops the estimate below
+    the threshold → the reply carries a refill nudge."""
+    monkeypatch.setenv("ASTHMA_RESCUE_CANISTER_PUFFS", "10")
+    monkeypatch.setenv("ASTHMA_RESCUE_REFILL_THRESHOLD", "3")
+    _pid, phone = await _seed_patient()
+
+    # Use 8 of a 10-puff canister → 2 remaining ≤ threshold 3.
+    delta = await asthma_handler.handle_rescue_log(
+        patient_phone=phone, new_user_text="used my reliever 8 times"
+    )
+    assert delta is not None
+    assert "asthma_rescue_refill_low" in delta["audit_reasons"]
+    assert "running low" in delta["response_body"].lower()
+
+
+async def test_refill_reset_clears_the_estimate(monkeypatch):
+    monkeypatch.setenv("ASTHMA_RESCUE_CANISTER_PUFFS", "10")
+    monkeypatch.setenv("ASTHMA_RESCUE_REFILL_THRESHOLD", "3")
+    _pid, phone = await _seed_patient()
+
+    # Burn the canister down.
+    await asthma_handler.handle_rescue_log(
+        patient_phone=phone, new_user_text="used my reliever 8 times"
+    )
+    # Refill resets the count.
+    reset = await asthma_handler.handle_rescue_refill(
+        patient_phone=phone, new_user_text="refilled my inhaler"
+    )
+    assert reset is not None
+    assert "asthma_rescue_refill" in reset["audit_reasons"]
+
+    # A subsequent small use is now well within budget → no low nudge.
+    delta = await asthma_handler.handle_rescue_log(
+        patient_phone=phone, new_user_text="used my reliever once"
+    )
+    assert delta is not None
+    assert "asthma_rescue_refill_low" not in delta["audit_reasons"]
+
+
+async def test_asthma_dispatch_routes_refill_before_use(monkeypatch):
+    """handle_asthma_log routes a refill signal to the reset path, not the
+    rescue-use path."""
+    _pid, phone = await _seed_patient()
+    delta = await asthma_handler.handle_asthma_log(
+        patient_phone=phone, new_user_text="got a new inhaler today"
+    )
+    assert delta is not None
+    assert "asthma_rescue_refill" in delta["audit_reasons"]

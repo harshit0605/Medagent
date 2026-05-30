@@ -80,3 +80,31 @@ def test_looks_like_asthma_log():
     assert looks_like_asthma_log("trigger: dust") is True
     assert looks_like_asthma_log("took my inhaler this morning") is False
     assert looks_like_asthma_log("just saying hi") is False
+
+
+# ---- puff-based refill estimation (E4, SoT §3C) ----------------------------
+
+
+def test_puffs_remaining_clamps():
+    from services.orchestrator.asthma_handler import puffs_remaining
+
+    assert puffs_remaining(canister_size=200, used_since_refill=0) == 200
+    assert puffs_remaining(canister_size=200, used_since_refill=185) == 15
+    # Over-use past the canister reads as 0, not negative.
+    assert puffs_remaining(canister_size=200, used_since_refill=250) == 0
+
+
+def test_looks_like_rescue_refill():
+    from services.orchestrator.asthma_handler import looks_like_rescue_refill
+
+    assert looks_like_rescue_refill("refilled my inhaler") is True
+    assert looks_like_rescue_refill("got a new reliever today") is True
+    assert looks_like_rescue_refill("replaced my ventolin") is True
+    # A rescue-USE message is NOT a refill (dispatch order depends on this).
+    assert looks_like_rescue_refill("used my reliever 2 times") is False
+    assert looks_like_rescue_refill("took my inhaler") is False
+    assert looks_like_rescue_refill(None) is False
+
+
+def test_refill_signal_routes_to_asthma_gate():
+    assert looks_like_asthma_log("refilled my inhaler") is True

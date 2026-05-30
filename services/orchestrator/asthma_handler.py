@@ -25,6 +25,7 @@ Design notes:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -35,12 +36,53 @@ from app.logging_redact import redact_phone
 log = logging.getLogger(__name__)
 
 RESCUE_METRIC_KEY = "rescue_inhaler_puffs"
+# A "refilled my inhaler" / "new inhaler" signal records this so the
+# puff-remaining estimate counts only puffs AFTER the latest refill.
+RESCUE_REFILL_METRIC_KEY = "rescue_inhaler_refill"
 ASTHMA_CONTROL_CATEGORY = "asthma_control"
 
 # Rolling-7-day control thresholds. Either trips a poor-control flag.
 _CONTROL_PUFFS_7D = 8  # frequent reliever use (GINA: >2 days/wk OR high count)
 _CONTROL_DAYS_7D = 3  # reliever use on 3+ separate days in the week
 _MAX_PLAUSIBLE_PUFFS = 40  # a single report above this is a typo, not a count
+
+
+def _canister_puffs() -> int:
+    """Doses in a full rescue-inhaler canister. Default 200 — a standard
+    salbutamol MDI. Env-configurable for other devices."""
+    try:
+        return int(os.getenv("ASTHMA_RESCUE_CANISTER_PUFFS", "200"))
+    except ValueError:
+        return 200
+
+
+def _refill_threshold() -> int:
+    """Remaining-puff count at/below which we nudge a refill. Default 20
+    (≈10% of a 200-dose canister) — enough lead time to reorder."""
+    try:
+        return int(os.getenv("ASTHMA_RESCUE_REFILL_THRESHOLD", "20"))
+    except ValueError:
+        return 20
+
+
+def puffs_remaining(*, canister_size: int, used_since_refill: int) -> int:
+    """Estimated rescue puffs left in the current canister. Clamped to
+    ``[0, canister_size]`` — over-use past the canister reads as 0, not
+    negative (pure; unit-tested)."""
+    return max(0, min(canister_size, canister_size - used_since_refill))
+
+
+# "Refilled my inhaler" / "new inhaler" / "got a new reliever" — resets the
+# puff-remaining estimate. Kept narrow so a generic "inhaler" doesn't match.
+_RESCUE_REFILL_RE = re.compile(
+    r"\b(refill(?:ed)?|replaced?|new|got a new|picked up)\b[^.]*\b"
+    r"(inhaler|reliever|rescue|salbutamol|ventolin|asthalin)\b",
+    re.IGNORECASE,
+)
+
+
+def looks_like_rescue_refill(text: str | None) -> bool:
+    return bool(text and _RESCUE_REFILL_RE.search(text))
 
 
 # ---- rescue-inhaler usage parsing ------------------------------------------
@@ -142,8 +184,13 @@ def looks_like_trigger_log(text: str | None) -> bool:
 
 
 def looks_like_asthma_log(text: str | None) -> bool:
-    """Cheap router gate — true for a rescue-use OR trigger-diary message."""
-    return looks_like_rescue_log(text) or looks_like_trigger_log(text)
+    """Cheap router gate — true for a rescue-use, rescue-refill, OR
+    trigger-diary message."""
+    return (
+        looks_like_rescue_log(text)
+        or looks_like_rescue_refill(text)
+        or looks_like_trigger_log(text)
+    )
 
 
 # ---- handlers --------------------------------------------------------------
@@ -187,8 +234,10 @@ async def handle_rescue_log(
         )
 
         week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        # One fetch serves both the 7-day control window and the
+        # since-refill cumulative for the puff-remaining estimate.
         recent = await goals_repo.list_observations_for_patient(
-            db, patient.id, metric_key=RESCUE_METRIC_KEY, limit=50
+            db, patient.id, metric_key=RESCUE_METRIC_KEY, limit=500
         )
         in_week = [o for o in recent if _aware(o.observed_at) >= week_ago]
         total_puffs = sum(int(o.value) for o in in_week)
@@ -197,6 +246,24 @@ async def handle_rescue_log(
             total_puffs >= _CONTROL_PUFFS_7D
             or distinct_days >= _CONTROL_DAYS_7D
         )
+
+        # --- puff-based refill estimate (SoT §3C) ---------------------------
+        refill_obs = await goals_repo.list_observations_for_patient(
+            db, patient.id, metric_key=RESCUE_REFILL_METRIC_KEY, limit=1
+        )
+        last_refill_at = (
+            _aware(refill_obs[0].observed_at) if refill_obs else None
+        )
+        used_since_refill = sum(
+            int(o.value)
+            for o in recent
+            if last_refill_at is None or _aware(o.observed_at) >= last_refill_at
+        )
+        remaining = puffs_remaining(
+            canister_size=_canister_puffs(),
+            used_since_refill=used_since_refill,
+        )
+        refill_low = remaining <= _refill_threshold()
 
         if poor_control:
             existing = await ops_tickets_repo.find_open_for_patient_category(
@@ -236,11 +303,24 @@ async def handle_rescue_log(
     audit = ["asthma_rescue_log"]
     if poor_control:
         audit.append("asthma_poor_control")
+    # Refill nudge when the estimated remaining puffs run low. Phrased as an
+    # estimate (we don't know the exact fill level); patient can correct by
+    # logging "refilled my inhaler".
+    if refill_low:
+        audit.append("asthma_rescue_refill_low")
+        body += (
+            f"\n\nHeads-up: by my count your rescue inhaler is running low "
+            f"(about {remaining} puff(s) left). Consider getting a refill so "
+            "you don't run out. Reply 'refilled my inhaler' once you do and "
+            "I'll reset the count."
+        )
     log.info(
-        "asthma rescue use logged for %s: %d puffs (poor_control=%s)",
-        patient_phone,
+        "asthma rescue use logged for %s: %d puffs (poor_control=%s, "
+        "remaining≈%d)",
+        redact_phone(patient_phone),
         count,
         poor_control,
+        remaining,
     )
     return {"response_body": body, "audit_reasons": audit}
 
@@ -282,11 +362,55 @@ async def handle_trigger_log(
     return {"response_body": body, "audit_reasons": ["asthma_trigger_log"]}
 
 
+async def handle_rescue_refill(
+    *, patient_phone: str, new_user_text: str
+) -> dict[str, Any] | None:
+    """Record a rescue-inhaler refill so the puff-remaining estimate resets.
+    Returns a delta or ``None`` when the text isn't a refill signal."""
+    if not looks_like_rescue_refill(new_user_text):
+        return None
+
+    from app.db.repositories import (
+        care_plan_goals as goals_repo,
+        patients as patients_repo,
+    )
+    from app.db.session import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as db:
+        patient = await patients_repo.get_by_phone(db, patient_phone)
+        if patient is None:
+            return None
+        await goals_repo.record_observation(
+            db,
+            patient_id=patient.id,
+            goal_id=None,
+            metric_key=RESCUE_REFILL_METRIC_KEY,
+            value=Decimal(_canister_puffs()),
+            unit="puffs",
+            source="patient_self_report",
+        )
+        await db.commit()
+    log.info("asthma rescue refill recorded for %s", redact_phone(patient_phone))
+    return {
+        "response_body": (
+            "Great — I've reset your rescue inhaler count to a full canister. "
+            "I'll let you know when it's running low again."
+        ),
+        "audit_reasons": ["asthma_rescue_refill"],
+    }
+
+
 async def handle_asthma_log(
     *, patient_phone: str, new_user_text: str
 ) -> dict[str, Any] | None:
-    """Dispatch an asthma self-report to the rescue-use handler first
-    (more specific), then the trigger-diary handler."""
+    """Dispatch an asthma self-report. Refill-reset is checked FIRST (most
+    specific), then rescue-use, then the trigger diary."""
+    delta = await handle_rescue_refill(
+        patient_phone=patient_phone, new_user_text=new_user_text
+    )
+    if delta is not None:
+        return delta
     delta = await handle_rescue_log(
         patient_phone=patient_phone, new_user_text=new_user_text
     )
