@@ -68,6 +68,44 @@ async def list_all(
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def search(
+    session: AsyncSession, *, query: str, limit: int = 25
+) -> list[Patient]:
+    """Full-text-ish patient search across name, phone, external_id, and the
+    medication names of their regimens. Case-insensitive substring match
+    (ILIKE) — adequate for clinic-scale data and avoids a tsvector migration;
+    promote to a GIN tsvector index if the patient count grows large.
+
+    Erased patients are excluded (their PII is scrubbed; searching the
+    anonymized token is pointless and could confuse operators)."""
+    from app.db.models import Regimen
+
+    q = query.strip()
+    if not q:
+        return []
+    like = f"%{q}%"
+
+    # Subquery: patient_ids whose regimens' medication matches.
+    med_match = (
+        select(Regimen.patient_id)
+        .where(Regimen.medication_name.ilike(like))
+        .scalar_subquery()
+    )
+    stmt = (
+        select(Patient)
+        .where(Patient.erased_at.is_(None))
+        .where(
+            Patient.full_name.ilike(like)
+            | Patient.phone.ilike(like)
+            | Patient.external_id.ilike(like)
+            | Patient.id.in_(med_match)
+        )
+        .order_by(Patient.created_at.desc())
+        .limit(limit)
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
 async def upsert_by_phone(
     session: AsyncSession,
     *,

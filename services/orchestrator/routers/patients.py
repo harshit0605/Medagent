@@ -300,6 +300,42 @@ async def list_patients(
     return out
 
 
+@router.get("/patients/search", response_model=list[PatientSummaryDTO])
+async def search_patients(
+    q: str,
+    db: AsyncSession = Depends(get_session),
+    limit: int = 25,
+) -> list[PatientSummaryDTO]:
+    """Operator full-text-ish patient search across name / phone / external_id
+    / medication. Registered before /patients/{patient_id} so the literal
+    'search' path matches here. Returns the same summary rows as the list."""
+    rows = await patients_repo.search(db, query=q, limit=limit)
+    today = datetime.now(timezone.utc).date()
+    open_ticket_counts = await ops_tickets_repo.open_counts_by_patient(db)
+    out: list[PatientSummaryDTO] = []
+    for p in rows:
+        regimens = await regimens_repo.list_for_patient(db, p.id, active_on=today)
+        appts_raw = await appointments_repo.list_for_patient(
+            db, p.id, upcoming_only=True, limit=5
+        )
+        appts = [a for a in appts_raw if a.status == AppointmentStatus.confirmed]
+        out.append(
+            PatientSummaryDTO(
+                id=p.id,
+                full_name=p.full_name,
+                phone=p.phone,
+                cohort_diabetes=p.cohort_diabetes,
+                cohort_cardiac=p.cohort_cardiac,
+                cohort_fall_risk=p.cohort_fall_risk,
+                active_regimen_count=len(regimens),
+                upcoming_appointment_count=len(appts),
+                open_ticket_count=open_ticket_counts.get(p.phone, 0),
+                created_at=p.created_at,
+            )
+        )
+    return out
+
+
 @router.get("/patients/{patient_id}", response_model=PatientDetailDTO)
 async def get_patient_detail(
     patient_id: int, db: AsyncSession = Depends(get_session)

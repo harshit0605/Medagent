@@ -1260,6 +1260,11 @@ export const orchestrator = {
 
   // Patients
   listPatients: () => call<PatientSummary[]>(ORCHESTRATOR_URL, "/patients"),
+  // Full-text-ish operator search across name / phone / external_id / med.
+  searchPatients: (q: string, limit = 25) =>
+    call<PatientSummary[]>(ORCHESTRATOR_URL, "/patients/search", {
+      query: { q, limit },
+    }),
   getPatient: (patientId: number) =>
     call<PatientDetail>(ORCHESTRATOR_URL, `/patients/${patientId}`),
   getPatientTimeline: (
