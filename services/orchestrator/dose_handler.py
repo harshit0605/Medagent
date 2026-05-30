@@ -30,6 +30,7 @@ from app.db.repositories import patients as patients_repo
 from app.db.repositories import regimens as regimens_repo
 from app.db.repositories import scheduled_events as scheduled_events_repo
 from app.db.session import get_sessionmaker
+from app.logging_redact import redact_phone
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ async def handle_dose_action(
             if acting_caregiver is None:
                 log.warning(
                     "dose action refused: phone=%s adherence.patient_id=%s",
-                    patient_phone,
+                    redact_phone(patient_phone),
                     adherence.patient_id,
                 )
                 return _reply(

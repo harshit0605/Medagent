@@ -29,6 +29,7 @@ from app.db.repositories import appointments as appointments_repo
 from app.db.repositories import doctors as doctors_repo
 from app.db.repositories import patient_inbound as patient_inbound_repo
 from app.db.repositories import patients as patients_repo
+from app.logging_redact import redact_phone
 
 log = logging.getLogger(__name__)
 
@@ -335,7 +336,7 @@ async def _build_dose_reminder(
     log.info(
         "dose reminder %s: out-of-CSW for patient %s — using template %s",
         event.id,
-        event.patient_id,
+        redact_phone(event.patient_id),
         _DOSE_TEMPLATE_NAME,
     )
     # Template body takes a single parameter (medication + dose). On the
@@ -528,7 +529,7 @@ async def _build_refill_reminder(
     log.info(
         "refill reminder %s: out-of-CSW for patient %s — using template %s",
         event.id,
-        event.patient_id,
+        redact_phone(event.patient_id),
         _REFILL_TEMPLATE_NAME,
     )
     return {
@@ -641,7 +642,7 @@ async def _build_lab_followup_reminder(
     log.info(
         "lab followup %s: out-of-CSW for patient %s — using template %s",
         event.id,
-        event.patient_id,
+        redact_phone(event.patient_id),
         _LAB_TEMPLATE_NAME,
     )
     return {
@@ -718,7 +719,7 @@ async def _build_pregnancy_weekly_reminder(
     log.info(
         "pregnancy weekly %s: out-of-CSW for patient %s — using template %s",
         event.id,
-        event.patient_id,
+        redact_phone(event.patient_id),
         _PREGNANCY_TEMPLATE_NAME,
     )
     return {
@@ -774,7 +775,7 @@ async def _build_pregnancy_milestone_reminder(
         "pregnancy milestone %s (%s): out-of-CSW for patient %s — template %s",
         event.id,
         payload.get("milestone_key"),
-        event.patient_id,
+        redact_phone(event.patient_id),
         _PREGNANCY_TEMPLATE_NAME,
     )
     return {
@@ -844,7 +845,7 @@ async def _build_postpartum_weekly_reminder(
     log.info(
         "postpartum weekly %s: out-of-CSW for patient %s — using template %s",
         event.id,
-        event.patient_id,
+        redact_phone(event.patient_id),
         _POSTPARTUM_TEMPLATE_NAME,
     )
     return {
@@ -913,7 +914,7 @@ async def _build_postpartum_milestone_reminder(
         "postpartum milestone %s (%s): out-of-CSW for patient %s — template %s",
         event.id,
         payload.get("milestone_key"),
-        event.patient_id,
+        redact_phone(event.patient_id),
         _POSTPARTUM_TEMPLATE_NAME,
     )
     return {
@@ -986,7 +987,7 @@ async def _build_substitution_request(
     log.info(
         "substitution request %s: out-of-CSW for patient %s — template %s",
         event.id,
-        event.patient_id,
+        redact_phone(event.patient_id),
         _SUBSTITUTION_TEMPLATE_NAME,
     )
     return {
@@ -1224,7 +1225,7 @@ async def _build_appointment_reminder(
     log.info(
         "appointment reminder %s: out-of-CSW for patient %s — using template %s",
         event.id,
-        event.patient_id,
+        redact_phone(event.patient_id),
         _REMINDER_TEMPLATE_NAME,
     )
 
